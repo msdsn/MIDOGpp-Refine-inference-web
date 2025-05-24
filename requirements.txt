@@ -1,0 +1,20 @@
+h11
+gunicorn
+fastapi
+uvicorn
+numpy
+python-decouple
+pydantic
+# yolo
+ultralytics --no-deps
+torch
+torchvision
+numpy
+pandas
+pyyaml
+pillow
+psutil
+requests
+scipy
+ultralytics-thop
+opencv-python-headless
