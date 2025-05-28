@@ -139,7 +139,7 @@ function App() {
                   fontSize="13"
                   fontWeight="600"
                 >
-                  {`${prediction.class_name} (${(prediction.confidence * 100).toFixed(1)}%)`}
+                  {`Mitotic Figure (${(prediction.confidence * 100).toFixed(1)}%)`}
                 </text>
               </g>
             );
@@ -212,7 +212,7 @@ function App() {
               <h3 className="ml-3 text-lg font-semibold text-gray-900">Sliding Window Processing</h3>
             </div>
             <p className="text-gray-600 text-sm">
-              <strong>Automatic scaling</strong> for large images using 480×480 window-based analysis
+              <strong>Automatic scaling</strong> for large images using 640×640 window-based analysis
             </p>
           </div>
         </div>
@@ -425,7 +425,7 @@ function App() {
                       <div>
                         <h5 className="text-purple-800 font-medium text-sm">Large Image Processing</h5>
                         <p className="text-purple-700 text-xs mt-1">
-                          This image was processed using sliding window technique with 480×480 patches and Non-Maximum Suppression to handle overlapping detections.
+                          This image was processed using sliding window technique with 640×640 patches and Non-Maximum Suppression to handle overlapping detections.
                         </p>
                       </div>
                     </div>
@@ -466,7 +466,7 @@ function App() {
                             </div>
                             
                             <div className="text-sm text-gray-600 space-y-1">
-                              <div>Class: <span className="font-medium">{prediction.class_name}</span></div>
+                              <div>Class: <span className="font-medium">Mitotic Figure</span></div>
                               <div className="text-xs text-gray-500">
                                 Position: ({prediction.bbox[0].toFixed(0)}, {prediction.bbox[1].toFixed(0)}) → 
                                 ({prediction.bbox[2].toFixed(0)}, {prediction.bbox[3].toFixed(0)})

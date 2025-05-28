@@ -293,3 +293,5 @@ docker-compose.prod.yml
 .pytest_cache/
 .coverage
 htmlcov/ 
+
+yolo11l.pt

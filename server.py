@@ -26,14 +26,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-def sliding_window_inference(image_array, model, window_size=480, overlap_ratio=0.2):
+def sliding_window_inference(image_array, model, window_size=640, overlap_ratio=0.2):
     """
     Perform sliding window inference on large images
     
     Args:
         image_array: Input image as numpy array
         model: YOLO model
-        window_size: Size of each window (480x480)
+        window_size: Size of each window (640x640)
         overlap_ratio: Overlap ratio between windows (0.2 = 20% overlap)
     
     Returns:
@@ -61,7 +61,7 @@ def sliding_window_inference(image_array, model, window_size=480, overlap_ratio=
             # Extract window
             window = image_array[start_y:end_y, start_x:end_x]
             
-            # Resize window to exactly 480x480 if needed
+            # Resize window to exactly 640x640 if needed
             if window.shape[0] != window_size or window.shape[1] != window_size:
                 window = cv2.resize(window, (window_size, window_size))
             
@@ -234,7 +234,7 @@ async def predict_cancer_cells(file: UploadFile = File(...)):
         print(f"Processing {file_extension.upper()} image of size: {original_width}x{original_height}")
         
         # Perform sliding window inference
-        if original_width <= 480 and original_height <= 480:
+        if original_width <= 640 and original_height <= 640:
             # Small image, process directly
             results = model(img_array)
             predictions = []
@@ -257,7 +257,7 @@ async def predict_cancer_cells(file: UploadFile = File(...)):
         else:
             # Large image, use sliding window approach
             print("Using sliding window inference for large image...")
-            predictions = sliding_window_inference(img_array, model, window_size=480, overlap_ratio=0.2)
+            predictions = sliding_window_inference(img_array, model, window_size=640, overlap_ratio=0.2)
             
             # Apply Non-Maximum Suppression to remove overlapping detections
             print(f"Before NMS: {len(predictions)} detections")
@@ -280,8 +280,8 @@ async def predict_cancer_cells(file: UploadFile = File(...)):
             "processing_info": {
                 "original_size": f"{original_width}x{original_height}",
                 "original_format": file_extension.upper(),
-                "method": "sliding_window" if (original_width > 480 or original_height > 480) else "direct",
-                "window_size": "480x480" if (original_width > 480 or original_height > 480) else "direct"
+                "method": "sliding_window" if (original_width > 640 or original_height > 640) else "direct",
+                "window_size": "640x640" if (original_width > 640 or original_height > 640) else "direct"
             }
         })
         
