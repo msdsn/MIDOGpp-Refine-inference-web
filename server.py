@@ -12,6 +12,33 @@ from PIL import Image
 import io
 import base64
 import math
+import boto3
+from botocore.exceptions import ClientError
+import uuid
+from pydantic import BaseModel
+from decouple import config
+
+# AWS S3 Configuration
+AWS_ACCESS_KEY_ID = config('AWS_ACCESS_KEY_ID', default='')
+AWS_SECRET_ACCESS_KEY = config('AWS_SECRET_ACCESS_KEY', default='') 
+AWS_REGION = config('AWS_REGION', default='us-east-1')
+S3_BUCKET_NAME = config('S3_BUCKET_NAME', default='midog-inference-uploads')
+
+# Initialize S3 client
+s3_client = boto3.client(
+    's3',
+    aws_access_key_id=AWS_ACCESS_KEY_ID,
+    aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+    region_name=AWS_REGION
+) if AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY else None
+
+# Pydantic models for request/response
+class PresignedUrlRequest(BaseModel):
+    filename: str
+    content_type: str
+
+class AnalyzeS3Request(BaseModel):
+    s3_key: str
 
 # Load YOLO model
 model = YOLO("best.pt")
@@ -185,6 +212,173 @@ def calculate_iou(bbox1, bbox2):
         return 0.0
     
     return intersection_area / union_area
+
+@app.post("/generate-presigned-url")
+async def generate_presigned_url(request: PresignedUrlRequest):
+    """
+    Generate presigned URL for direct S3 upload
+    """
+    if not s3_client:
+        raise HTTPException(
+            status_code=500, 
+            detail="AWS S3 not configured. Please check environment variables."
+        )
+    
+    try:
+        # Validate file format
+        allowed_extensions = {'.png', '.jpg', '.jpeg', '.tiff', '.tif'}
+        file_extension = os.path.splitext(request.filename.lower())[1]
+        
+        if file_extension not in allowed_extensions:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Unsupported file format. Supported formats: PNG, JPG, JPEG, TIFF, TIF"
+            )
+        
+        # Generate unique S3 key
+        unique_filename = f"{uuid.uuid4()}{file_extension}"
+        s3_key = f"uploads/{unique_filename}"
+        
+        # Generate presigned URL for PUT operation
+        presigned_url = s3_client.generate_presigned_url(
+            'put_object',
+            Params={
+                'Bucket': S3_BUCKET_NAME,
+                'Key': s3_key,
+                'ContentType': request.content_type
+            },
+            ExpiresIn=3600  # URL expires in 1 hour
+        )
+        
+        return JSONResponse({
+            "presigned_url": presigned_url,
+            "s3_key": s3_key,
+            "expires_in": 3600
+        })
+        
+    except ClientError as e:
+        print(f"AWS S3 error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"S3 error: {str(e)}")
+    except Exception as e:
+        print(f"Error generating presigned URL: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error generating presigned URL: {str(e)}")
+
+@app.post("/analyze-s3")
+async def analyze_s3_image(request: AnalyzeS3Request):
+    """
+    Analyze image uploaded to S3 using YOLO model
+    """
+    if not s3_client:
+        raise HTTPException(
+            status_code=500, 
+            detail="AWS S3 not configured. Please check environment variables."
+        )
+    
+    try:
+        # Download image from S3
+        print(f"Downloading image from S3: {request.s3_key}")
+        
+        response = s3_client.get_object(Bucket=S3_BUCKET_NAME, Key=request.s3_key)
+        image_content = response['Body'].read()
+        
+        # Get file extension from S3 key
+        file_extension = os.path.splitext(request.s3_key.lower())[1]
+        
+        # Convert to PIL Image with explicit TIFF support
+        try:
+            image = Image.open(io.BytesIO(image_content))
+            
+            # Convert to RGB if needed (TIFF files can be in various color modes)
+            if image.mode in ('RGBA', 'LA', 'P'):
+                # Convert RGBA, LA, or palette to RGB
+                rgb_image = Image.new('RGB', image.size, (255, 255, 255))
+                if image.mode == 'P':
+                    image = image.convert('RGBA')
+                rgb_image.paste(image, mask=image.split()[-1] if image.mode in ('RGBA', 'LA') else None)
+                image = rgb_image
+            elif image.mode not in ('RGB', 'L'):
+                # Convert any other mode to RGB
+                image = image.convert('RGB')
+                
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid or corrupted image file: {str(e)}")
+        
+        # Convert PIL to numpy array
+        img_array = np.array(image)
+        
+        # Get original image dimensions
+        original_height, original_width = img_array.shape[:2]
+        
+        print(f"Processing {file_extension.upper()} image of size: {original_width}x{original_height}")
+        
+        # Perform sliding window inference
+        if original_width <= 640 and original_height <= 640:
+            # Small image, process directly
+            results = model(img_array)
+            predictions = []
+            
+            for result in results:
+                boxes = result.boxes
+                if boxes is not None:
+                    for box in boxes:
+                        x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                        confidence = float(box.conf[0].cpu().numpy())
+                        class_id = int(box.cls[0].cpu().numpy())
+                        class_name = model.names[class_id] if class_id < len(model.names) else f"Class_{class_id}"
+                        
+                        predictions.append({
+                            "bbox": [float(x1), float(y1), float(x2), float(y2)],
+                            "confidence": confidence,
+                            "class_id": class_id,
+                            "class_name": class_name
+                        })
+        else:
+            # Large image, use sliding window approach
+            print("Using sliding window inference for large image...")
+            predictions = sliding_window_inference(img_array, model, window_size=640, overlap_ratio=0.2)
+            
+            # Apply Non-Maximum Suppression to remove overlapping detections
+            print(f"Before NMS: {len(predictions)} detections")
+            predictions = non_max_suppression_custom(predictions, iou_threshold=0.5)
+            print(f"After NMS: {len(predictions)} detections")
+        
+        # Convert image to base64 for frontend display (always as PNG for consistency)
+        img_buffer = io.BytesIO()
+        image.save(img_buffer, format='PNG')
+        img_base64 = base64.b64encode(img_buffer.getvalue()).decode('utf-8')
+        
+        print(f"Returning {len(predictions)} final detections")
+        
+        # Clean up S3 file after processing (optional)
+        try:
+            s3_client.delete_object(Bucket=S3_BUCKET_NAME, Key=request.s3_key)
+            print(f"Cleaned up S3 file: {request.s3_key}")
+        except Exception as e:
+            print(f"Warning: Could not delete S3 file {request.s3_key}: {str(e)}")
+        
+        return JSONResponse({
+            "predictions": predictions,
+            "image": f"data:image/png;base64,{img_base64}",
+            "image_width": original_width,
+            "image_height": original_height,
+            "total_detections": len(predictions),
+            "processing_info": {
+                "original_size": f"{original_width}x{original_height}",
+                "original_format": file_extension.upper(),
+                "method": "sliding_window" if (original_width > 640 or original_height > 640) else "direct",
+                "window_size": "640x640" if (original_width > 640 or original_height > 640) else "direct",
+                "source": "s3"
+            }
+        })
+        
+    except ClientError as e:
+        print(f"AWS S3 error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"S3 error: {str(e)}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error processing S3 image: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error processing S3 image: {str(e)}")
 
 @app.post("/predict")
 async def predict_cancer_cells(file: UploadFile = File(...)):

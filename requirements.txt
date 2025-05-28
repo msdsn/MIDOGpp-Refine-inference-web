@@ -19,3 +19,5 @@ scipy
 ultralytics-thop
 opencv-python-headless
 python-multipart
+# AWS S3 integration
+boto3

@@ -57,59 +57,105 @@ function App() {
     setUploadProgress(0);
     setError(null);
 
-    const formData = new FormData();
-    formData.append('file', selectedFile);
-
     try {
-      // Use XMLHttpRequest for upload progress tracking
-      const result: AnalysisResult = await new Promise((resolve, reject) => {
+      // Step 1: Get presigned URL from backend
+      setUploadProgress(5);
+      console.log('Getting presigned URL...');
+      
+      const presignedResponse = await fetch('/generate-presigned-url', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          filename: selectedFile.name,
+          content_type: selectedFile.type || 'image/jpeg'
+        })
+      });
+
+      if (!presignedResponse.ok) {
+        const errorData = await presignedResponse.json();
+        throw new Error(errorData.detail || 'Failed to get upload URL');
+      }
+
+      const { presigned_url, s3_key } = await presignedResponse.json();
+      setUploadProgress(10);
+
+      // Step 2: Upload directly to S3 using presigned URL
+      console.log('Uploading to S3...');
+      
+      await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         
         // Track upload progress
         xhr.upload.addEventListener('progress', (e) => {
           if (e.lengthComputable) {
-            const percentComplete = (e.loaded / e.total) * 100;
+            // Map upload progress to 10-70% range
+            const percentComplete = 10 + ((e.loaded / e.total) * 60);
             setUploadProgress(Math.round(percentComplete));
           }
         });
 
         // Handle upload completion
         xhr.upload.addEventListener('load', () => {
-          setIsUploading(false);
-          setUploadProgress(100);
+          setUploadProgress(70);
+          console.log('S3 upload completed');
         });
 
         // Handle response
         xhr.addEventListener('load', () => {
           if (xhr.status === 200) {
-            try {
-              const response = JSON.parse(xhr.responseText);
-              resolve(response);
-            } catch (e) {
-              reject(new Error('Invalid response format'));
-            }
+            resolve();
           } else {
-            reject(new Error(`Server error: ${xhr.status}`));
+            reject(new Error(`S3 upload failed: ${xhr.status} ${xhr.statusText}`));
           }
         });
 
         // Handle errors
         xhr.addEventListener('error', () => {
-          reject(new Error('Network error occurred'));
+          reject(new Error('S3 upload network error'));
         });
 
         xhr.addEventListener('timeout', () => {
-          reject(new Error('Upload timeout'));
+          reject(new Error('S3 upload timeout'));
         });
 
-        // Configure and send request
-        xhr.open('POST', '/predict');
+        // Configure and send S3 upload request
+        xhr.open('PUT', presigned_url);
+        xhr.setRequestHeader('Content-Type', selectedFile.type || 'image/jpeg');
         xhr.timeout = 300000; // 5 minutes timeout
-        xhr.send(formData);
+        xhr.send(selectedFile);
       });
 
+      setIsUploading(false);
+      setUploadProgress(75);
+
+      // Step 3: Request analysis from backend using S3 key
+      console.log('Requesting analysis...');
+      
+      const analysisResponse = await fetch('/analyze-s3', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          s3_key: s3_key
+        })
+      });
+
+      if (!analysisResponse.ok) {
+        const errorData = await analysisResponse.json();
+        throw new Error(errorData.detail || 'Analysis failed');
+      }
+
+      const result: AnalysisResult = await analysisResponse.json();
+      setUploadProgress(100);
       setAnalysisResult(result);
+      
+      console.log('Analysis completed successfully');
+
     } catch (err) {
+      console.error('Analysis error:', err);
       setError(err instanceof Error ? err.message : 'An unknown error occurred');
     } finally {
       setIsLoading(false);
@@ -348,10 +394,22 @@ function App() {
                         <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                         </svg>
-                        <span>Uploading {selectedFile?.name}</span>
+                        <span>
+                          {uploadProgress < 10 
+                            ? 'Preparing secure upload...' 
+                            : uploadProgress < 70 
+                            ? `Uploading to cloud storage... ${uploadProgress}%`
+                            : 'Upload completed, processing...'
+                          }
+                        </span>
                       </div>
                       <div className="text-xs text-gray-400 mt-1">
-                        {((selectedFile?.size || 0) / 1024 / 1024).toFixed(2)} MB
+                        {uploadProgress < 10 
+                          ? 'Getting secure upload URL'
+                          : uploadProgress < 70 
+                          ? `${selectedFile?.name} • ${((selectedFile?.size || 0) / 1024 / 1024).toFixed(2)} MB`
+                          : 'Image ready for AI analysis'
+                        }
                       </div>
                     </>
                   ) : (

@@ -57,6 +57,69 @@ pip install -r requirements.txt
 - Ensure `best.pt` model file is in the project root directory
 - This file contains the trained weights for mitotic figure detection
 
+### AWS S3 Configuration (Recommended for Production)
+
+For improved upload performance and scalability, configure AWS S3 for direct file uploads:
+
+1. **Create AWS S3 Bucket**:
+```bash
+# Using AWS CLI
+aws s3 mb s3://midog-inference-uploads --region us-east-1
+
+# Enable CORS for web uploads
+aws s3api put-bucket-cors --bucket midog-inference-uploads --cors-configuration file://cors.json
+```
+
+2. **Configure CORS policy** (`cors.json`):
+```json
+{
+    "CORSRules": [
+        {
+            "AllowedOrigins": ["*"],
+            "AllowedMethods": ["PUT", "POST"],
+            "AllowedHeaders": ["*"],
+            "MaxAgeSeconds": 3000
+        }
+    ]
+}
+```
+
+3. **Create IAM User and Policy**:
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "s3:PutObject",
+                "s3:GetObject",
+                "s3:DeleteObject"
+            ],
+            "Resource": "arn:aws:s3:::midog-inference-uploads/*"
+        }
+    ]
+}
+```
+
+4. **Set environment variables**:
+```bash
+# Copy example environment file
+cp env.example .env
+
+# Edit .env with your AWS credentials
+AWS_ACCESS_KEY_ID=your_aws_access_key_here
+AWS_SECRET_ACCESS_KEY=your_aws_secret_key_here
+AWS_REGION=us-east-1
+S3_BUCKET_NAME=midog-inference-uploads
+```
+
+**Benefits of S3 Integration**:
+- ⚡ **Faster uploads**: Direct S3 upload bypasses server bottlenecks
+- 📈 **Improved scalability**: Handle larger images and concurrent users
+- 🔒 **Enhanced security**: Presigned URLs with limited access time
+- ⏱️ **Better UX**: Real-time upload progress with detailed status
+
 ### Frontend Installation
 
 1. **Navigate to frontend directory**:
@@ -104,8 +167,42 @@ cd app && npm run dev
 
 ## 📝 API Documentation
 
+### POST /generate-presigned-url
+Generate secure presigned URL for direct S3 upload (recommended approach).
+
+**Request**: JSON with filename and content type
+```bash
+curl -X POST "http://localhost:8000/generate-presigned-url" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "filename": "he_slide_image.jpg",
+       "content_type": "image/jpeg"
+     }'
+```
+
+**Response**:
+```json
+{
+  "presigned_url": "https://s3.amazonaws.com/bucket/uploads/uuid-filename.jpg?...",
+  "s3_key": "uploads/uuid-filename.jpg",
+  "expires_in": 3600
+}
+```
+
+### POST /analyze-s3
+Analyze image uploaded to S3 using the presigned URL.
+
+**Request**: JSON with S3 key
+```bash
+curl -X POST "http://localhost:8000/analyze-s3" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "s3_key": "uploads/uuid-filename.jpg"
+     }'
+```
+
 ### POST /predict
-Analyzes uploaded histological images for mitotic figure detection.
+Direct server upload for mitotic figure detection (legacy approach).
 
 **Request**: Multipart form data with image file
 ```bash
@@ -115,7 +212,7 @@ curl -X POST "http://localhost:8000/predict" \
      -F "file=@path/to/he_slide_image.jpg"
 ```
 
-**Response Format**:
+**Analysis Response Format** (for both S3 and direct upload):
 ```json
 {
   "predictions": [
@@ -129,7 +226,14 @@ curl -X POST "http://localhost:8000/predict" \
   "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA...",
   "image_width": 1024,
   "image_height": 768,
-  "total_detections": 3
+  "total_detections": 3,
+  "processing_info": {
+    "original_size": "1024x768",
+    "original_format": "JPG",
+    "method": "sliding_window",
+    "window_size": "640x640",
+    "source": "s3"
+  }
 }
 ```
 

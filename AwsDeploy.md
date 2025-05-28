@@ -7,7 +7,7 @@ Aşağıdaki güncellenmiş adım adım rehberde “No space left on device” h
 1. **AWS Console → EC2 → Launch Instance**
 2. **AMI**: Amazon Linux 2023
 3. **Instance Type**: t3.medium (CPU-only demo) veya GPU gerekiyorsa g4dn.xlarge
-4. **Key pair**: `.pem` anahtarınızı seçin
+4. **Key pair**: `.pem` anahtarınızı seçin, ec2-user
 5. **Security group**:
 
    * SSH (22) → Source “My IP”
