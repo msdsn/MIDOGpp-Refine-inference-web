@@ -1,4 +1,5 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import ImageViewer from './components/ImageViewer';
 
 interface Prediction {
   bbox: [number, number, number, number];
@@ -12,6 +13,15 @@ interface ProcessingInfo {
   original_format?: string;
   method: string;
   window_size: string;
+  source?: string;
+  test_image_name?: string;
+}
+
+interface TestImage {
+  name: string;
+  display_name: string;
+  description: string;
+  url: string;
 }
 
 interface AnalysisResult {
@@ -31,12 +41,32 @@ function App() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [isUploading, setIsUploading] = useState(false);
+  const [testImages, setTestImages] = useState<TestImage[]>([]);
+  const [selectedTestImage, setSelectedTestImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load test images on component mount
+  useEffect(() => {
+    const loadTestImages = async () => {
+      try {
+        const response = await fetch('/test-images');
+        if (response.ok) {
+          const data = await response.json();
+          setTestImages(data.test_images);
+        }
+      } catch (error) {
+        console.error('Failed to load test images:', error);
+      }
+    };
+    
+    loadTestImages();
+  }, []);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       setSelectedFile(file);
+      setSelectedTestImage(null); // Clear test image selection
       setError(null);
       setAnalysisResult(null);
       
@@ -46,113 +76,160 @@ function App() {
     }
   };
 
+  const handleTestImageSelect = (testImageName: string) => {
+    setSelectedTestImage(testImageName);
+    setSelectedFile(null); // Clear file selection
+    setError(null);
+    setAnalysisResult(null);
+    
+    // Create preview URL from test image
+    const testImage = testImages.find(img => img.name === testImageName);
+    if (testImage) {
+      setPreviewUrl(testImage.url);
+    }
+    
+    // Clear file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const handleAnalyze = async () => {
-    if (!selectedFile) {
-      setError('Please select an image first');
+    if (!selectedFile && !selectedTestImage) {
+      setError('Please select an image or test image first');
       return;
     }
 
     setIsLoading(true);
-    setIsUploading(true);
-    setUploadProgress(0);
     setError(null);
 
     try {
-      // Step 1: Get presigned URL from backend
-      setUploadProgress(5);
-      console.log('Getting presigned URL...');
-      
-      const presignedResponse = await fetch('/generate-presigned-url', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          filename: selectedFile.name,
-          content_type: selectedFile.type || 'image/jpeg'
-        })
-      });
-
-      if (!presignedResponse.ok) {
-        const errorData = await presignedResponse.json();
-        throw new Error(errorData.detail || 'Failed to get upload URL');
-      }
-
-      const { presigned_url, s3_key } = await presignedResponse.json();
-      setUploadProgress(10);
-
-      // Step 2: Upload directly to S3 using presigned URL
-      console.log('Uploading to S3...');
-      
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
+      // If test image is selected, use test image endpoint
+      if (selectedTestImage) {
+        console.log('Analyzing test image:', selectedTestImage);
         
-        // Track upload progress
-        xhr.upload.addEventListener('progress', (e) => {
-          if (e.lengthComputable) {
-            // Map upload progress to 10-70% range
-            const percentComplete = 10 + ((e.loaded / e.total) * 60);
-            setUploadProgress(Math.round(percentComplete));
-          }
+        const analysisResponse = await fetch('/analyze-test-image', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            test_image_name: selectedTestImage
+          })
         });
 
-        // Handle upload completion
-        xhr.upload.addEventListener('load', () => {
-          setUploadProgress(70);
-          console.log('S3 upload completed');
-        });
+        if (!analysisResponse.ok) {
+          const errorData = await analysisResponse.json();
+          throw new Error(errorData.detail || 'Test image analysis failed');
+        }
 
-        // Handle response
-        xhr.addEventListener('load', () => {
-          if (xhr.status === 200) {
-            resolve();
-          } else {
-            reject(new Error(`S3 upload failed: ${xhr.status} ${xhr.statusText}`));
-          }
-        });
-
-        // Handle errors
-        xhr.addEventListener('error', () => {
-          reject(new Error('S3 upload network error'));
-        });
-
-        xhr.addEventListener('timeout', () => {
-          reject(new Error('S3 upload timeout'));
-        });
-
-        // Configure and send S3 upload request
-        xhr.open('PUT', presigned_url);
-        xhr.setRequestHeader('Content-Type', selectedFile.type || 'image/jpeg');
-        xhr.timeout = 300000; // 5 minutes timeout
-        xhr.send(selectedFile);
-      });
-
-      setIsUploading(false);
-      setUploadProgress(75);
-
-      // Step 3: Request analysis from backend using S3 key
-      console.log('Requesting analysis...');
-      
-      const analysisResponse = await fetch('/analyze-s3', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          s3_key: s3_key
-        })
-      });
-
-      if (!analysisResponse.ok) {
-        const errorData = await analysisResponse.json();
-        throw new Error(errorData.detail || 'Analysis failed');
+        const result: AnalysisResult = await analysisResponse.json();
+        setAnalysisResult(result);
+        console.log('Test image analysis completed successfully');
+        return;
       }
 
-      const result: AnalysisResult = await analysisResponse.json();
-      setUploadProgress(100);
-      setAnalysisResult(result);
-      
-      console.log('Analysis completed successfully');
+      // If file is selected, use existing upload flow
+      if (selectedFile) {
+        setIsUploading(true);
+        setUploadProgress(0);
+
+        // Step 1: Get presigned URL from backend
+        setUploadProgress(5);
+        console.log('Getting presigned URL...');
+        
+        const presignedResponse = await fetch('/generate-presigned-url', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            filename: selectedFile.name,
+            content_type: selectedFile.type || 'image/jpeg'
+          })
+        });
+
+        if (!presignedResponse.ok) {
+          const errorData = await presignedResponse.json();
+          throw new Error(errorData.detail || 'Failed to get upload URL');
+        }
+
+        const { presigned_url, s3_key } = await presignedResponse.json();
+        setUploadProgress(10);
+
+        // Step 2: Upload directly to S3 using presigned URL
+        console.log('Uploading to S3...');
+        
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          
+          // Track upload progress
+          xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+              // Map upload progress to 10-70% range
+              const percentComplete = 10 + ((e.loaded / e.total) * 60);
+              setUploadProgress(Math.round(percentComplete));
+            }
+          });
+
+          // Handle upload completion
+          xhr.upload.addEventListener('load', () => {
+            setUploadProgress(70);
+            console.log('S3 upload completed');
+          });
+
+          // Handle response
+          xhr.addEventListener('load', () => {
+            if (xhr.status === 200) {
+              resolve();
+            } else {
+              reject(new Error(`S3 upload failed: ${xhr.status} ${xhr.statusText}`));
+            }
+          });
+
+          // Handle errors
+          xhr.addEventListener('error', () => {
+            reject(new Error('S3 upload network error'));
+          });
+
+          xhr.addEventListener('timeout', () => {
+            reject(new Error('S3 upload timeout'));
+          });
+
+          // Configure and send S3 upload request
+          xhr.open('PUT', presigned_url);
+          xhr.setRequestHeader('Content-Type', selectedFile.type || 'image/jpeg');
+          xhr.timeout = 300000; // 5 minutes timeout
+          xhr.send(selectedFile);
+        });
+
+        setIsUploading(false);
+        setUploadProgress(75);
+
+        // Step 3: Request analysis from backend using S3 key
+        console.log('Requesting analysis...');
+        
+        const analysisResponse = await fetch('/analyze-s3', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            s3_key: s3_key
+          })
+        });
+
+        if (!analysisResponse.ok) {
+          const errorData = await analysisResponse.json();
+          throw new Error(errorData.detail || 'Analysis failed');
+        }
+
+        const result: AnalysisResult = await analysisResponse.json();
+        setUploadProgress(100);
+        setAnalysisResult(result);
+        
+        console.log('Analysis completed successfully');
+      }
 
     } catch (err) {
       console.error('Analysis error:', err);
@@ -166,6 +243,7 @@ function App() {
 
   const resetAnalysis = () => {
     setSelectedFile(null);
+    setSelectedTestImage(null);
     setAnalysisResult(null);
     setError(null);
     setPreviewUrl(null);
@@ -174,70 +252,6 @@ function App() {
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
-  };
-
-  const renderImageWithBoundingBoxes = () => {
-    if (!analysisResult) return null;
-
-    return (
-      <div className="relative inline-block">
-        <img 
-          src={analysisResult.image} 
-          alt="Analyzed cancer cells"
-          className="max-w-full h-auto border border-gray-300 rounded-lg"
-        />
-        
-        {/* Render bounding boxes */}
-        <svg 
-          className="absolute top-0 left-0 w-full h-full"
-          viewBox={`0 0 ${analysisResult.image_width} ${analysisResult.image_height}`}
-          preserveAspectRatio="none"
-        >
-          {analysisResult.predictions.map((prediction, index) => {
-            const [x1, y1, x2, y2] = prediction.bbox;
-            const width = x2 - x1;
-            const height = y2 - y1;
-            
-            return (
-              <g key={index}>
-                {/* Bounding box rectangle */}
-                <rect
-                  x={x1}
-                  y={y1}
-                  width={width}
-                  height={height}
-                  fill="none"
-                  stroke="#dc2626"
-                  strokeWidth="3"
-                  className="opacity-90"
-                />
-                
-                {/* Label background */}
-                <rect
-                  x={x1}
-                  y={y1 - 28}
-                  width={Math.max(width, 120)}
-                  height="28"
-                  fill="#dc2626"
-                  className="opacity-95"
-                />
-                
-                {/* Label text */}
-                <text
-                  x={x1 + 6}
-                  y={y1 - 8}
-                  fill="white"
-                  fontSize="13"
-                  fontWeight="600"
-                >
-                  {`Mitotic Figure (${(prediction.confidence * 100).toFixed(1)}%)`}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
-      </div>
-    );
   };
 
   return (
@@ -353,6 +367,83 @@ function App() {
                 </div>
               </div>
             )}
+
+            {/* Test Images Section */}
+            {testImages.length > 0 && (
+              <div className="mt-8">
+                <div className="flex items-center my-6">
+                  <div className="flex-1 border-t border-gray-300"></div>
+                  <span className="px-4 text-sm text-gray-500 bg-white">or try sample images</span>
+                  <div className="flex-1 border-t border-gray-300"></div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {testImages.map((testImage) => (
+                    <div
+                      key={testImage.name}
+                      onClick={() => handleTestImageSelect(testImage.name)}
+                      className={`cursor-pointer border-2 rounded-lg p-4 transition-all duration-200 ${
+                        selectedTestImage === testImage.name
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-4">
+                        <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
+                          selectedTestImage === testImage.name 
+                            ? 'bg-blue-100' 
+                            : 'bg-gray-100'
+                        }`}>
+                          <svg className={`w-6 h-6 ${
+                            selectedTestImage === testImage.name 
+                              ? 'text-blue-600' 
+                              : 'text-gray-600'
+                          }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                        </div>
+                        <div className="flex-1 text-left">
+                          <div className={`font-medium ${
+                            selectedTestImage === testImage.name 
+                              ? 'text-blue-900' 
+                              : 'text-gray-900'
+                          }`}>
+                            {testImage.display_name}
+                          </div>
+                          <div className={`text-sm ${
+                            selectedTestImage === testImage.name 
+                              ? 'text-blue-600' 
+                              : 'text-gray-500'
+                          }`}>
+                            {testImage.description}
+                          </div>
+                        </div>
+                        {selectedTestImage === testImage.name && (
+                          <div className="flex-shrink-0">
+                            <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {selectedTestImage && (
+                  <div className="mt-6 p-4 bg-green-50 rounded-lg border border-green-200">
+                    <div className="flex items-center justify-center">
+                      <svg className="w-5 h-5 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-green-800 font-medium">
+                        Test image selected: {testImages.find(img => img.name === selectedTestImage)?.display_name}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -447,7 +538,7 @@ function App() {
         <div className="flex justify-center gap-4 mb-8">
           <button
             onClick={handleAnalyze}
-            disabled={!selectedFile || isLoading || isUploading}
+            disabled={(!selectedFile && !selectedTestImage) || isLoading || isUploading}
             className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-4 px-8 rounded-lg transition-colors duration-200 disabled:cursor-not-allowed flex items-center"
           >
             {isUploading ? (
@@ -464,7 +555,7 @@ function App() {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                Analyzing Slide...
+                {selectedTestImage ? 'Analyzing Test Image...' : 'Analyzing Slide...'}
               </>
             ) : (
               <>
@@ -476,7 +567,7 @@ function App() {
             )}
           </button>
           
-          {(selectedFile || analysisResult) && (
+          {(selectedFile || selectedTestImage || analysisResult) && (
             <button
               onClick={resetAnalysis}
               className="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-4 px-8 rounded-lg transition-colors duration-200 flex items-center"
@@ -521,7 +612,12 @@ function App() {
                   </p>
                 </div>
                 <div className="text-center bg-gray-50 rounded-lg p-6">
-                  {renderImageWithBoundingBoxes()}
+                  <ImageViewer 
+                    imageSrc={analysisResult.image} 
+                    predictions={analysisResult.predictions}
+                    imageWidth={analysisResult.image_width}
+                    imageHeight={analysisResult.image_height}
+                  />
                 </div>
               </div>
 
@@ -576,6 +672,15 @@ function App() {
                               <span className="text-gray-600">Window Size:</span>
                               <span className="font-medium text-gray-800">
                                 {analysisResult.processing_info.window_size}
+                              </span>
+                            </div>
+                          )}
+
+                          {analysisResult.processing_info.source === 'test_image' && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-600">Source:</span>
+                              <span className="font-medium text-green-600">
+                                Test Image ({analysisResult.processing_info.test_image_name})
                               </span>
                             </div>
                           )}

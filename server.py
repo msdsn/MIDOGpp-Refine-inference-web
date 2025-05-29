@@ -40,6 +40,9 @@ class PresignedUrlRequest(BaseModel):
 class AnalyzeS3Request(BaseModel):
     s3_key: str
 
+class AnalyzeTestImageRequest(BaseModel):
+    test_image_name: str
+
 # Load YOLO model
 model = YOLO("best.pt")
 
@@ -489,6 +492,150 @@ async def predict_cancer_cells(file: UploadFile = File(...)):
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "model_loaded": model is not None}
+
+@app.get("/test-images")
+async def get_test_images():
+    """Get available test images"""
+    test_images = [
+        {
+            "name": "007.jpg",
+            "display_name": "Test Sample 007 - H&E Stained Slide",
+            "description": "Histological section with multiple mitotic figures",
+            "url": "/test-images/007.jpg"
+        },
+        {
+            "name": "024.jpg", 
+            "display_name": "Test Sample 024 - H&E Stained Slide",
+            "description": "Tissue sample with various cellular structures",
+            "url": "/test-images/024.jpg"
+        }
+    ]
+    return JSONResponse({"test_images": test_images})
+
+@app.get("/test-images/{image_name}")
+async def serve_test_image(image_name: str):
+    """Securely serve only allowed test images"""
+    # Only allow specific test images
+    allowed_images = ["007.jpg", "024.jpg"]
+    
+    if image_name not in allowed_images:
+        raise HTTPException(status_code=404, detail="Test image not found")
+    
+    image_path = image_name
+    if not os.path.exists(image_path):
+        raise HTTPException(status_code=404, detail="Test image file not found")
+    
+    return FileResponse(image_path, media_type="image/jpeg")
+
+@app.post("/analyze-test-image")
+async def analyze_test_image(request: AnalyzeTestImageRequest):
+    """
+    Analyze a test image directly from the server
+    """
+    try:
+        # Validate test image name
+        allowed_test_images = ["007.jpg", "024.jpg"]
+        if request.test_image_name not in allowed_test_images:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid test image. Allowed: {', '.join(allowed_test_images)}"
+            )
+        
+        # Load test image from root folder
+        test_image_path = request.test_image_name
+        
+        if not os.path.exists(test_image_path):
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Test image not found: {request.test_image_name}"
+            )
+        
+        print(f"Analyzing test image: {request.test_image_name}")
+        
+        # Load and process the image
+        try:
+            image = Image.open(test_image_path)
+            
+            # Convert to RGB if needed
+            if image.mode in ('RGBA', 'LA', 'P'):
+                rgb_image = Image.new('RGB', image.size, (255, 255, 255))
+                if image.mode == 'P':
+                    image = image.convert('RGBA')
+                rgb_image.paste(image, mask=image.split()[-1] if image.mode in ('RGBA', 'LA') else None)
+                image = rgb_image
+            elif image.mode not in ('RGB', 'L'):
+                image = image.convert('RGB')
+                
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid or corrupted test image: {str(e)}")
+        
+        # Convert PIL to numpy array
+        img_array = np.array(image)
+        
+        # Get original image dimensions
+        original_height, original_width = img_array.shape[:2]
+        
+        print(f"Processing test image of size: {original_width}x{original_height}")
+        
+        # Perform sliding window inference
+        if original_width <= 640 and original_height <= 640:
+            # Small image, process directly
+            results = model(img_array)
+            predictions = []
+            
+            for result in results:
+                boxes = result.boxes
+                if boxes is not None:
+                    for box in boxes:
+                        x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                        confidence = float(box.conf[0].cpu().numpy())
+                        class_id = int(box.cls[0].cpu().numpy())
+                        class_name = model.names[class_id] if class_id < len(model.names) else f"Class_{class_id}"
+                        
+                        predictions.append({
+                            "bbox": [float(x1), float(y1), float(x2), float(y2)],
+                            "confidence": confidence,
+                            "class_id": class_id,
+                            "class_name": class_name
+                        })
+        else:
+            # Large image, use sliding window approach
+            print("Using sliding window inference for large test image...")
+            predictions = sliding_window_inference(img_array, model, window_size=640, overlap_ratio=0.2)
+            
+            # Apply Non-Maximum Suppression to remove overlapping detections
+            print(f"Before NMS: {len(predictions)} detections")
+            predictions = non_max_suppression_custom(predictions, iou_threshold=0.5)
+            print(f"After NMS: {len(predictions)} detections")
+        
+        # Convert image to base64 for frontend display
+        img_buffer = io.BytesIO()
+        image.save(img_buffer, format='PNG')
+        img_base64 = base64.b64encode(img_buffer.getvalue()).decode('utf-8')
+        
+        print(f"Returning {len(predictions)} detections for test image {request.test_image_name}")
+        
+        return JSONResponse({
+            "predictions": predictions,
+            "image": f"data:image/png;base64,{img_base64}",
+            "image_width": original_width,
+            "image_height": original_height,
+            "total_detections": len(predictions),
+            "processing_info": {
+                "original_size": f"{original_width}x{original_height}",
+                "original_format": "JPG",
+                "method": "sliding_window" if (original_width > 640 or original_height > 640) else "direct",
+                "window_size": "640x640" if (original_width > 640 or original_height > 640) else "direct",
+                "source": "test_image",
+                "test_image_name": request.test_image_name
+            }
+        })
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error processing test image: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error processing test image: {str(e)}")
 
 @app.get("/{full_path:path}")
 async def serve_react_app(request: Request, full_path: str):
