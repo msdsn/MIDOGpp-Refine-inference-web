@@ -188,6 +188,8 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/midog.duckdns.org/privkey.pem;
 
     location / {
+        # Stream file directly to FastAPI
+        proxy_request_buffering off;
         proxy_pass http://127.0.0.1:8000;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -195,19 +197,6 @@ server {
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
-    location /predict {
-        # Dosyayı direkt FastAPI’ye stream et
-        proxy_request_buffering off;
-
-        proxy_pass http://127.0.0.1:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
     }
 
@@ -228,6 +217,8 @@ sudo systemctl reload nginx
 not:
 proxy_request_buffering off; (yapmassan resim dosyasini fastapi okuyamiyor)
 client_max_body_size 2G; (yapmazsan buyuk resim gonderilemiyor)
+
+### If you will copy and paste to conf file(using nano), remove '\\' escape characters. for example: '\\$remote_addr' -> '$remote_addr'
 
 ---
 
