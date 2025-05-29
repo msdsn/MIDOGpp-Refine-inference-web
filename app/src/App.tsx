@@ -26,7 +26,7 @@ interface TestImage {
 
 interface AnalysisResult {
   predictions: Prediction[];
-  image: string;
+  image?: string;
   image_width: number;
   image_height: number;
   total_detections: number;
@@ -246,7 +246,13 @@ function App() {
     setSelectedTestImage(null);
     setAnalysisResult(null);
     setError(null);
+    
+    // Clean up preview URL to prevent memory leaks
+    if (previewUrl && previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(previewUrl);
+    }
     setPreviewUrl(null);
+    
     setUploadProgress(0);
     setIsUploading(false);
     if (fileInputRef.current) {
@@ -597,23 +603,27 @@ function App() {
 
         {/* Results Section */}
         {analysisResult && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-            <h2 className="text-2xl font-semibold text-gray-900 mb-8">Mitotic Figure Detection Results</h2>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-2 sm:p-4 lg:p-8">
+            <h2 className="text-xl sm:text-2xl font-semibold text-gray-900 mb-4 sm:mb-6 lg:mb-8 px-2 sm:px-0">Mitotic Figure Detection Results</h2>
             
-            <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
+            <div className="grid grid-cols-1 xl:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
               {/* Image with Bounding Boxes */}
-              <div className="xl:col-span-3">
-                <div className="mb-6">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-2">
+              <div className="xl:col-span-3 order-2 xl:order-1">
+                <div className="mb-4 sm:mb-6 px-2 sm:px-0">
+                  <h3 className="text-base sm:text-lg font-semibold text-gray-800 mb-2">
                     Analyzed Slide with Detected Mitotic Figures
                   </h3>
-                  <p className="text-gray-600 text-sm">
+                  <p className="text-gray-600 text-xs sm:text-sm">
                     Mitotic figures are highlighted with red bounding boxes and confidence scores
                   </p>
                 </div>
-                <div className="text-center bg-gray-50 rounded-lg p-6">
+                <div className="text-center bg-gray-50 rounded-lg p-1 sm:p-3 lg:p-6">
                   <ImageViewer 
-                    imageSrc={analysisResult.image} 
+                    imageSrc={
+                      selectedTestImage 
+                        ? `/test-images/${selectedTestImage}` 
+                        : previewUrl || analysisResult.image || ''
+                    } 
                     predictions={analysisResult.predictions}
                     imageWidth={analysisResult.image_width}
                     imageHeight={analysisResult.image_height}
@@ -622,7 +632,7 @@ function App() {
               </div>
 
               {/* Statistics and Details */}
-              <div className="space-y-6">
+              <div className="space-y-4 sm:space-y-6 order-1 xl:order-2 px-2 sm:px-0">
                 {/* Summary Stats */}
                 <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-6 border border-blue-200">
                   <h3 className="text-lg font-semibold text-gray-800 mb-4">Analysis Summary</h3>

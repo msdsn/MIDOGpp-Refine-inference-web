@@ -192,7 +192,54 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
     }
   }, [position]);
 
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+  // Pinch-to-zoom for touch devices
+  const handleTouchZoom = useCallback((e: TouchEvent) => {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      
+      const touch1 = e.touches[0];
+      const touch2 = e.touches[1];
+      
+      // Calculate distance between touches
+      const distance = Math.sqrt(
+        Math.pow(touch2.clientX - touch1.clientX, 2) + 
+        Math.pow(touch2.clientY - touch1.clientY, 2)
+      );
+      
+      // Store initial distance for comparison
+      if (!containerRef.current?.dataset.initialPinchDistance) {
+        containerRef.current!.dataset.initialPinchDistance = distance.toString();
+        containerRef.current!.dataset.initialScale = scale.toString();
+        return;
+      }
+      
+      const initialDistance = parseFloat(containerRef.current.dataset.initialPinchDistance || '0');
+      const initialScale = parseFloat(containerRef.current.dataset.initialScale || '1');
+      const scaleChange = distance / initialDistance;
+      const newScale = Math.min(Math.max(initialScale * scaleChange, 0.1), 8);
+      
+      // Calculate center point between touches
+      const centerX = (touch1.clientX + touch2.clientX) / 2;
+      const centerY = (touch1.clientY + touch2.clientY) / 2;
+      
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        const relativeX = centerX - rect.left;
+        const relativeY = centerY - rect.top;
+        
+        // Zoom towards center point
+        const scaleRatio = newScale / scale;
+        const newX = position.x - (relativeX - position.x) * (scaleRatio - 1);
+        const newY = position.y - (relativeY - position.y) * (scaleRatio - 1);
+        
+        setPosition({ x: newX, y: newY });
+      }
+      
+      setScale(newScale);
+    }
+  }, [scale, position]);
+
+  const handleTouchMove = useCallback((e: TouchEvent) => {
     if (e.touches.length === 1 && isDragging) {
       e.preventDefault();
       const touch = e.touches[0];
@@ -200,12 +247,32 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
         x: touch.clientX - dragStart.x,
         y: touch.clientY - dragStart.y
       });
+    } else if (e.touches.length === 2) {
+      handleTouchZoom(e);
     }
-  }, [isDragging, dragStart]);
+  }, [isDragging, dragStart, handleTouchZoom]);
 
   const handleTouchEnd = useCallback(() => {
     setIsDragging(false);
+    if (containerRef.current) {
+      delete containerRef.current.dataset.initialPinchDistance;
+      delete containerRef.current.dataset.initialScale;
+    }
   }, []);
+
+  // Add touch event listeners with passive: false
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('touchend', handleTouchEnd);
+    
+    return () => {
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [handleTouchMove, handleTouchEnd]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -261,114 +328,60 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [zoomIn, zoomOut, resetView, fitToScreen, showMinimap]);
 
-  // Pinch-to-zoom for touch devices
-  const handleTouchZoom = useCallback((e: React.TouchEvent) => {
-    if (e.touches.length === 2) {
-      e.preventDefault();
-      
-      const touch1 = e.touches[0];
-      const touch2 = e.touches[1];
-      
-      // Calculate distance between touches
-      const distance = Math.sqrt(
-        Math.pow(touch2.clientX - touch1.clientX, 2) + 
-        Math.pow(touch2.clientY - touch1.clientY, 2)
-      );
-      
-      // Store initial distance for comparison
-      if (!containerRef.current?.dataset.initialPinchDistance) {
-        containerRef.current!.dataset.initialPinchDistance = distance.toString();
-        containerRef.current!.dataset.initialScale = scale.toString();
-        return;
-      }
-      
-      const initialDistance = parseFloat(containerRef.current.dataset.initialPinchDistance || '0');
-      const initialScale = parseFloat(containerRef.current.dataset.initialScale || '1');
-      const scaleChange = distance / initialDistance;
-      const newScale = Math.min(Math.max(initialScale * scaleChange, 0.1), 8);
-      
-      // Calculate center point between touches
-      const centerX = (touch1.clientX + touch2.clientX) / 2;
-      const centerY = (touch1.clientY + touch2.clientY) / 2;
-      
-      if (containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect();
-        const relativeX = centerX - rect.left;
-        const relativeY = centerY - rect.top;
-        
-        // Zoom towards center point
-        const scaleRatio = newScale / scale;
-        const newX = position.x - (relativeX - position.x) * (scaleRatio - 1);
-        const newY = position.y - (relativeY - position.y) * (scaleRatio - 1);
-        
-        setPosition({ x: newX, y: newY });
-      }
-      
-      setScale(newScale);
-    }
-  }, [scale, position]);
-
-  const handleTouchZoomEnd = useCallback(() => {
-    if (containerRef.current) {
-      delete containerRef.current.dataset.initialPinchDistance;
-      delete containerRef.current.dataset.initialScale;
-    }
-  }, []);
-
   return (
     <div className="space-y-4">
       {/* Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-gray-50 rounded-lg border">
+      <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-4 p-2 sm:p-4 bg-gray-50 rounded-lg border">
         <div className="flex items-center space-x-2">
           <button
             onClick={zoomIn}
-            className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            className="p-1.5 sm:p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             title="Zoom In"
           >
-            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
             </svg>
           </button>
           
           <button
             onClick={zoomOut}
-            className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            className="p-1.5 sm:p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             title="Zoom Out"
           >
-            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 12H6" />
             </svg>
           </button>
           
           <button
             onClick={fitToScreen}
-            className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            className="p-1.5 sm:p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             title="Fit to Screen"
           >
-            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
             </svg>
           </button>
           
           <button
             onClick={resetView}
-            className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            className="p-1.5 sm:p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             title="Reset View"
           >
-            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
           </button>
         </div>
         
-        <div className="flex items-center space-x-4">
-          <span className="text-sm text-gray-600">
+        <div className="flex items-center space-x-2 sm:space-x-4">
+          <span className="text-xs sm:text-sm text-gray-600">
             Zoom: {Math.round(scale * 100)}%
           </span>
           
           <button
             onClick={() => setShowMinimap(!showMinimap)}
-            className={`px-3 py-1 rounded text-sm transition-colors ${
+            className={`px-2 sm:px-3 py-1 rounded text-xs sm:text-sm transition-colors ${
               showMinimap 
                 ? 'bg-blue-100 text-blue-700 border border-blue-300' 
                 : 'bg-gray-100 text-gray-600 border border-gray-300'
@@ -378,7 +391,7 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
             Minimap
           </button>
           
-          <div className="text-sm text-gray-500">
+          <div className="hidden sm:block text-sm text-gray-500">
             Mouse wheel to zoom • Drag to pan
           </div>
         </div>
@@ -386,24 +399,24 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
 
       {/* Prediction Navigation */}
       {predictions.length > 0 && (
-        <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+        <div className="p-2 sm:p-4 bg-blue-50 rounded-lg border border-blue-200">
           <div className="flex items-center justify-between mb-3">
-            <h4 className="font-semibold text-blue-900">
+            <h4 className="text-sm sm:text-base font-semibold text-blue-900">
               Detected Mitotic Figures ({predictions.length})
             </h4>
             {selectedPrediction !== null && (
-              <span className="text-sm text-blue-600">
+              <span className="text-xs sm:text-sm text-blue-600">
                 Focused on Detection #{selectedPrediction + 1}
               </span>
             )}
           </div>
           
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1 sm:gap-2">
             {predictions.map((prediction, index) => (
               <button
                 key={index}
                 onClick={() => focusOnPrediction(index)}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                className={`px-2 sm:px-3 py-1 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all ${
                   selectedPrediction === index
                     ? 'bg-blue-600 text-white shadow-md'
                     : 'bg-white text-blue-700 border border-blue-300 hover:bg-blue-100'
@@ -419,25 +432,16 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
       {/* Image Container */}
       <div 
         ref={containerRef}
-        className={`relative w-full h-[600px] bg-gray-100 rounded-lg overflow-hidden border border-gray-300 ${
+        className={`relative w-full h-[400px] sm:h-[500px] lg:h-[600px] bg-gray-100 rounded-lg overflow-hidden border border-gray-300 ${
           isDragging ? 'cursor-grabbing' : 'cursor-grab'
         }`}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        onTouchStart={(e) => {
-          handleTouchStart(e);
-          handleTouchZoom(e);
-        }}
-        onTouchMove={(e) => {
-          handleTouchMove(e);
-          handleTouchZoom(e);
-        }}
-        onTouchEnd={() => {
-          handleTouchEnd();
-          handleTouchZoomEnd();
-        }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={() => {}}
+        onTouchEnd={() => {}}
       >
         <div
           style={{

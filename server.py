@@ -345,11 +345,6 @@ async def analyze_s3_image(request: AnalyzeS3Request):
             predictions = non_max_suppression_custom(predictions, iou_threshold=0.5)
             print(f"After NMS: {len(predictions)} detections")
         
-        # Convert image to base64 for frontend display (always as PNG for consistency)
-        img_buffer = io.BytesIO()
-        image.save(img_buffer, format='PNG')
-        img_base64 = base64.b64encode(img_buffer.getvalue()).decode('utf-8')
-        
         print(f"Returning {len(predictions)} final detections")
         
         # Clean up S3 file after processing (optional)
@@ -361,7 +356,6 @@ async def analyze_s3_image(request: AnalyzeS3Request):
         
         return JSONResponse({
             "predictions": predictions,
-            "image": f"data:image/png;base64,{img_base64}",
             "image_width": original_width,
             "image_height": original_height,
             "total_detections": len(predictions),
@@ -461,16 +455,10 @@ async def predict_cancer_cells(file: UploadFile = File(...)):
             predictions = non_max_suppression_custom(predictions, iou_threshold=0.5)
             print(f"After NMS: {len(predictions)} detections")
         
-        # Convert image to base64 for frontend display (always as PNG for consistency)
-        img_buffer = io.BytesIO()
-        image.save(img_buffer, format='PNG')
-        img_base64 = base64.b64encode(img_buffer.getvalue()).decode('utf-8')
-        
         print(f"Returning {len(predictions)} final detections")
         
         return JSONResponse({
             "predictions": predictions,
-            "image": f"data:image/png;base64,{img_base64}",
             "image_width": original_width,
             "image_height": original_height,
             "total_detections": len(predictions),
@@ -608,16 +596,10 @@ async def analyze_test_image(request: AnalyzeTestImageRequest):
             predictions = non_max_suppression_custom(predictions, iou_threshold=0.5)
             print(f"After NMS: {len(predictions)} detections")
         
-        # Convert image to base64 for frontend display
-        img_buffer = io.BytesIO()
-        image.save(img_buffer, format='PNG')
-        img_base64 = base64.b64encode(img_buffer.getvalue()).decode('utf-8')
-        
         print(f"Returning {len(predictions)} detections for test image {request.test_image_name}")
         
         return JSONResponse({
             "predictions": predictions,
-            "image": f"data:image/png;base64,{img_base64}",
             "image_width": original_width,
             "image_height": original_height,
             "total_detections": len(predictions),
