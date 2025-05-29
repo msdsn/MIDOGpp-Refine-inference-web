@@ -295,7 +295,7 @@ function App() {
               <h3 className="ml-3 text-lg font-semibold text-gray-900">Time Savings</h3>
             </div>
             <p className="text-gray-600 text-sm">
-              Achieve up to <strong>60% time savings</strong> per slide with AI-assisted mitotic figure identification
+              Achieve up to <strong>TBD% time savings</strong> per slide with AI-assisted mitotic figure identification
             </p>
           </div>
 
@@ -309,7 +309,7 @@ function App() {
               <h3 className="ml-3 text-lg font-semibold text-gray-900">Enhanced Consistency</h3>
             </div>
             <p className="text-gray-600 text-sm">
-              <strong>32.6% improvement</strong> in consistency between pathologists through standardized AI analysis
+              <strong>TBD% improvement</strong> in consistency between pathologists through standardized AI analysis
             </p>
           </div>
 
