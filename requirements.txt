@@ -21,3 +21,5 @@ opencv-python-headless
 python-multipart
 # AWS S3 integration
 boto3
+supabase==2.16.0
+pyjwt==2.8.0
