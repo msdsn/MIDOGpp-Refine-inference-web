@@ -3,11 +3,13 @@ import { I18nProvider } from '@cloudscape-design/components/i18n';
 import messages from '@cloudscape-design/components/i18n/messages/all.en';
 
 import { AuthProvider } from './contexts/AuthContext';
+import { RealtimeProviders } from './contexts/RealtimeProviders';
 import ProtectedRoute from './components/ProtectedRoute';
 import AppLayout from './components/AppLayout';
 import DashboardPage from './pages/DashboardPage.tsx';
 import HistoryPage from './pages/HistoryPage.tsx';
 import AnalyzePage from './pages/AnalyzePage.tsx';
+import DemoAnalyzePage from './pages/DemoAnalyzePage.tsx';
 import ProfilePage from './pages/ProfilePage.tsx';
 
 import '@cloudscape-design/global-styles/index.css';
@@ -18,8 +20,9 @@ function App() {
   return (
     <I18nProvider locale={LOCALE} messages={[messages]}>
       <AuthProvider>
-        <Router>
-          <Routes>
+        <RealtimeProviders>
+          <Router>
+            <Routes>
             {/* All routes are protected - anonymous users auto sign-in */}
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route
@@ -38,6 +41,16 @@ function App() {
                 <ProtectedRoute>
                   <AppLayout>
                     <AnalyzePage />
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/demo"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <DemoAnalyzePage />
                   </AppLayout>
                 </ProtectedRoute>
               }
@@ -64,9 +77,10 @@ function App() {
             />
             
             {/* Catch all route */}
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
-        </Router>
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            </Routes>
+          </Router>
+        </RealtimeProviders>
       </AuthProvider>
     </I18nProvider>
   );

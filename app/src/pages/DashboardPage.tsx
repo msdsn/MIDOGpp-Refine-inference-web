@@ -13,7 +13,21 @@ import {
   StatusIndicator,
   Link
 } from '@cloudscape-design/components';
-import type { AnalysisHistory } from '../types/analysis';
+// Local type for this component
+interface AnalysisHistory {
+  id: string;
+  userId: string;
+  imageName: string;
+  imageSize: number;
+  analysisDate: Date;
+  result: {
+    total_detections: number;
+  };
+  processingTime: number;
+  status: 'completed' | 'failed' | 'processing';
+  isTestImage: boolean;
+  testImageName?: string;
+}
 
 const DashboardPage: React.FC = () => {
   const { user } = useAuth();

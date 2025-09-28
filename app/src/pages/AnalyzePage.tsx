@@ -1,5 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useAnalyses } from '../contexts/AnalysesContext';
+import { useDetections } from '../contexts/DetectionsContext';
+import { useImages } from '../contexts/ImagesContext';
 import {
   Container,
   Header,
@@ -14,126 +17,134 @@ import {
   StatusIndicator,
   ColumnLayout
 } from '@cloudscape-design/components';
-import type { AnalysisResult, TestImage, AnalysisHistory } from '../types/analysis';
+
+
+// TestImage interface removed - using database images directly
+//import ImageViewer3D from '../components/ImageViewer3D';
 import ImageViewer from '../components/ImageViewer';
-import { useAnalysisProgress } from '../hooks/useAnalysisProgress';
 import { authenticatedFetchJson } from '../lib/api';
+
+import { v4 as uuidv4 } from 'uuid';
 
 const AnalyzePage: React.FC = () => {
   const { user } = useAuth();
+  const { analyses } = useAnalyses();
+  const { detectionsByAnalysis } = useDetections();
+  const { images } = useImages();
+
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [isUploading, setIsUploading] = useState(false);
-  const [testImages, setTestImages] = useState<TestImage[]>([]);
-  const [selectedTestImage, setSelectedTestImage] = useState<string | null>(null);
-  const [showResults, setShowResults] = useState(false);
+  const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [currentAnalysisId, setCurrentAnalysisId] = useState<string | null>(null);
+  const [currentImageId, setCurrentImageId] = useState<string | null>(null);
 
-  // Real-time progress tracking
-  const { 
-    progress, 
-    progressPercentage, 
-    currentStage, 
-    isComplete, 
-    isFailed 
-  } = useAnalysisProgress(currentAnalysisId || '');
+  useEffect(() => {
+    console.log('analyses', analyses);
+  }, [analyses]);
+  useEffect(() => {
+    console.log('detectionsByAnalysis', detectionsByAnalysis);
+  }, [detectionsByAnalysis]);
+  useEffect(() => {
+    console.log('images', images);
+  }, [images]);
+
+  // Get current analysis from context
+  const currentAnalysis = useMemo(() => {
+    if (!currentAnalysisId) return null;
+    console.log('currentAnalysisIdxx', currentAnalysisId);
+    console.log('currentAnalysis', analyses.find(a => a.id === currentAnalysisId));
+    return analyses.find(a => a.id === currentAnalysisId) || null;
+  }, [analyses, currentAnalysisId]);
+
+  // Get current analysis detections
+  const currentDetections = useMemo(() => {
+    if (!currentAnalysisId) return [];
+    console.log('currentDetections', detectionsByAnalysis[currentAnalysisId]);
+    return detectionsByAnalysis[currentAnalysisId] || [];
+  }, [detectionsByAnalysis, currentAnalysisId]);
+
+  // Get current analysis image
+  const currentImage = useMemo(() => {
+    if (!currentImageId) return null;
+    console.log('currentImage', images.find(img => img.id === currentImageId));
+    return images.find(img => img.id === currentImageId) || null;
+  }, [images, currentImageId]);
+
+  // Get test images from context
+  const testImages = useMemo(() => {
+    return images.filter(img => img.is_test_image);
+  }, [images]);
+
+  // Selected image is handled via selectedImageId state
+
+  // Calculate progress from context data
+  const progressPercentage = useMemo(() => {
+    if (!currentAnalysis) return 0;
+    if (currentAnalysis.status === 'completed') return 100;
+    if (currentAnalysis.status === 'failed') return 0;
+
+    // Calculate based on current_window / total_windows
+    if (currentAnalysis.total_windows > 0) {
+      return Math.round((currentAnalysis.current_window / currentAnalysis.total_windows) * 100);
+    }
+
+    return 50; // Processing
+  }, [currentAnalysis]);
+
+  // Get current stage description
+  const currentStage = useMemo(() => {
+    if (!currentAnalysis) return 'Initializing...';
+
+    switch (currentAnalysis.status) {
+      case 'completed':
+        return 'Analysis complete!';
+      case 'failed':
+        return 'Analysis failed';
+      case 'processing':
+        if (currentAnalysis.total_windows > 1) {
+          return `Analyzing window ${currentAnalysis.current_window + 1} of ${currentAnalysis.total_windows}...`;
+        }
+        return 'Running AI detection...';
+      default:
+        return 'Initializing...';
+    }
+  }, [currentAnalysis]);
+
+  
+  const isComplete = currentAnalysis?.status === 'completed';
+  const isFailed = currentAnalysis?.status === 'failed';
 
   // Watch for analysis completion
   useEffect(() => {
-    if (isComplete && progress) {
-      // Convert Supabase analysis to AnalysisResult format
-      const predictions = progress.analysis_detections?.map(detection => ({
-        bbox: [detection.bbox_x1, detection.bbox_y1, detection.bbox_x2, detection.bbox_y2] as [number, number, number, number],
-        confidence: detection.confidence,
-        class_id: detection.class_id,
-        class_name: detection.class_name
-      })) || [];
-
-      const result: AnalysisResult = {
-        predictions,
-        image_width: progress.user_images?.image_width || 0,
-        image_height: progress.user_images?.image_height || 0,
-        total_detections: progress.total_detections,
-        processing_info: {
-          original_size: `${progress.user_images?.image_width || 0}x${progress.user_images?.image_height || 0}`,
-          original_format: progress.user_images?.file_format || '',
-          method: progress.processing_method,
-          window_size: progress.window_size || 'direct',
-          source: progress.source_type === 'uploaded' ? 's3' : 'test_image'
-        }
-      };
-
-      setAnalysisResult(result);
-      setShowResults(true);
-      setIsLoading(false);
+    if (isComplete && currentAnalysis) {
       setIsUploading(false);
       setUploadProgress(0);
-      setCurrentAnalysisId(null);
-
-      // Save to localStorage for compatibility
-      if (user) {
-        const analysis: AnalysisHistory = {
-          id: progress.id,
-          userId: user.id,
-          imageName: progress.image_name,
-          imageSize: progress.user_images?.file_size || 0,
-          analysisDate: new Date(progress.analysis_date),
-          result,
-          processingTime: progress.processing_time || 0,
-          status: 'completed',
-          isTestImage: progress.source_type === 'test_image',
-          testImageName: progress.source_type === 'test_image' ? selectedTestImage || undefined : undefined
-        };
-
-        const existingHistory = JSON.parse(localStorage.getItem('analysisHistory') || '[]');
-        existingHistory.push(analysis);
-        localStorage.setItem('analysisHistory', JSON.stringify(existingHistory));
-      }
+      console.log('Analysis completed!', currentAnalysis.id);
     }
-  }, [isComplete, progress, user, selectedTestImage]);
+  }, [isComplete, currentAnalysis]);
 
   // Handle analysis failure
   useEffect(() => {
-    if (isFailed && progress) {
-      setError(progress.error_message || 'Analysis failed');
-      setIsLoading(false);
+    if (isFailed && currentAnalysis) {
+      setError(currentAnalysis.error_message || 'Analysis failed');
       setIsUploading(false);
       setUploadProgress(0);
       setCurrentAnalysisId(null);
     }
-  }, [isFailed, progress]);
+  }, [isFailed, currentAnalysis]);
 
-  // Load test images on component mount
-  useEffect(() => {
-    const loadTestImages = async () => {
-      try {
-        const response = await fetch('/test-images');
-        if (response.ok) {
-          const data = await response.json();
-          console.log(data);
-          setTestImages(data.test_images);
-        }
-      } catch (error) {
-        console.error('Failed to load test images:', error);
-      }
-    };
-    
-    loadTestImages();
-  }, []);
+  // Test images are now loaded from ImagesContext
 
   const handleFileUpload = ({ detail }: any) => {
     const files = detail.value;
     setSelectedFiles(files);
-    setSelectedTestImage(null);
+    setSelectedImageId(null);
     setError(null);
-    setAnalysisResult(null);
-    setShowResults(false);
     setCurrentAnalysisId(null);
-    
+
     if (files.length > 0) {
       const url = URL.createObjectURL(files[0]);
       setPreviewUrl(url);
@@ -142,49 +153,74 @@ const AnalyzePage: React.FC = () => {
     }
   };
 
-  const handleTestImageSelect = (testImageName: string) => {
-    setSelectedTestImage(testImageName);
+  const handleImageSelect = (imageId: string) => {
+    setSelectedImageId(imageId);
     setSelectedFiles([]);
     setError(null);
-    setAnalysisResult(null);
-    setShowResults(false);
     setCurrentAnalysisId(null);
-    
-    const testImage = testImages.find(img => img.name === testImageName);
-    if (testImage) {
-      setPreviewUrl(testImage.url);
+
+    const image = images.find(img => img.id === imageId);
+    if (image && image.is_test_image) {
+      // For test images, construct URL from s3_key
+      const filename = image.s3_key?.split('/').pop() || '';
+      setPreviewUrl(`/test-image/${filename}`);
+    } else if (image?.s3_url) {
+      setPreviewUrl(image.s3_url);
     }
   };
 
   const handleAnalyze = async () => {
-    if (selectedFiles.length === 0 && !selectedTestImage) {
-      setError('Please select an image or test image first');
+    if (selectedFiles.length === 0 && !selectedImageId) {
+      setError('Please select an image first');
       return;
     }
 
-    setIsLoading(true);
+    const analysisId = uuidv4();
+    setCurrentAnalysisId(analysisId);
+
     setError(null);
-    setCurrentAnalysisId(null);
 
     try {
       // If test image is selected
-      if (selectedTestImage) {
-        console.log('Analyzing test image:', selectedTestImage);
-        
-        const result = await authenticatedFetchJson<AnalysisResult>('/analyze-test-image', {
-          method: 'POST',
-          body: {
-            test_image_name: selectedTestImage
+      if (selectedImageId) {
+        const selectedImg = images.find(img => img.id === selectedImageId);
+        if (selectedImg?.is_test_image) {
+          console.log('Analyzing test image:', selectedImg.id);
+
+          const result = await authenticatedFetchJson('/analyze', {
+            method: 'POST',
+            body: {
+              image_id: selectedImg.id,
+              is_test_image: true
+            }
+          });
+
+          if (result.completed) {
+            // Wait for context to update with new analysis
+            setTimeout(() => {
+              const mostRecentAnalysis = analyses
+                .filter(a => a.profile_id === user?.id)
+                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+
+              if (mostRecentAnalysis) {
+                //setCurrentAnalysisId(mostRecentAnalysis.id);
+                console.log('Found test image analysis:', mostRecentAnalysis.id);
+              } else {
+
+              }
+            }, 1000);
+
+            console.log('Test image analysis started, tracking via context...');
+          } else {
+            setError('Test image analysis failed');
+
           }
-        });
-        
-        setAnalysisResult(result);
-        setShowResults(true);
-        setIsLoading(false);
-        
-        console.log('Test image analysis completed successfully');
-        return;
+          return;
+        }
       }
+
+      const imageId = uuidv4();
+      setCurrentImageId(imageId);
 
       // If file is selected
       if (selectedFiles.length > 0) {
@@ -195,7 +231,7 @@ const AnalyzePage: React.FC = () => {
         // Step 1: Get presigned URL
         setUploadProgress(5);
         console.log('Getting presigned URL...');
-        
+
         const { presigned_url, s3_key } = await authenticatedFetchJson<{ presigned_url: string; s3_key: string }>('/generate-presigned-url', {
           method: 'POST',
           body: {
@@ -203,24 +239,24 @@ const AnalyzePage: React.FC = () => {
             content_type: selectedFile.type || 'image/jpeg'
           }
         });
-        
+
         setUploadProgress(10);
 
         // Step 2: Upload to S3
         console.log('Uploading to S3...');
-        
+
         await new Promise<void>((resolve, reject) => {
           const xhr = new XMLHttpRequest();
-          
+
           xhr.upload.addEventListener('progress', (e) => {
             if (e.lengthComputable) {
-              const percentComplete = 10 + ((e.loaded / e.total) * 60);
+              const percentComplete = 10 + ((e.loaded / e.total) * 80);
               setUploadProgress(Math.round(percentComplete));
             }
           });
 
           xhr.upload.addEventListener('load', () => {
-            setUploadProgress(70);
+            setUploadProgress(95);
             console.log('S3 upload completed');
           });
 
@@ -247,37 +283,52 @@ const AnalyzePage: React.FC = () => {
         });
 
         setIsUploading(false);
-        setUploadProgress(75);
+        setUploadProgress(100);
 
         // Step 3: Request analysis
         console.log('Requesting analysis...');
-        
-        const result = await authenticatedFetchJson('/analyze-s3', {
+
+        const result = await authenticatedFetchJson('/analyze', {
           method: 'POST',
           body: {
-            s3_key: s3_key
+            analysis_id: analysisId,
+            model_name: 'mitotic-figure-detection',
+            image_id: imageId,
+            s3_key: s3_key,
+            is_test_image: false
           }
         });
-        
-        // If we got an analysis_id, start real-time tracking
-        if (result.analysis_id) {
-          setCurrentAnalysisId(result.analysis_id);
-          setUploadProgress(100);
-          // Real-time tracking will handle the rest
+
+        // The new /analyze endpoint returns a simple completion status
+        // Real analysis tracking happens via database
+        if (result.completed) {
+
+          // Wait a moment for the database to update, then find the most recent analysis
+          setTimeout(() => {
+            const mostRecentAnalysis = analyses
+              .filter(a => a.profile_id === user?.id)
+              .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+
+            if (mostRecentAnalysis) {
+              //setCurrentAnalysisId(mostRecentAnalysis.id);
+              console.log('Found new analysis:', mostRecentAnalysis.id);
+            } else {
+              // If no analysis found yet, keep checking
+
+            }
+          }, 1000);
+
+          console.log('Analysis started, tracking via context...');
         } else {
-          // Fallback to immediate result
-          setAnalysisResult(result);
-          setShowResults(true);
-          setIsLoading(false);
+          setError('Analysis failed to complete');
         }
-        
+
         console.log('Analysis started successfully');
       }
 
     } catch (err) {
       console.error('Analysis error:', err);
       setError(err instanceof Error ? err.message : 'An unknown error occurred');
-      setIsLoading(false);
       setIsUploading(false);
       setUploadProgress(0);
       setCurrentAnalysisId(null);
@@ -286,20 +337,17 @@ const AnalyzePage: React.FC = () => {
 
   const resetAnalysis = () => {
     setSelectedFiles([]);
-    setSelectedTestImage(null);
-    setAnalysisResult(null);
+    setSelectedImageId(null);
     setError(null);
-    setShowResults(false);
     setCurrentAnalysisId(null);
-    
+
     if (previewUrl && previewUrl.startsWith('blob:')) {
       URL.revokeObjectURL(previewUrl);
     }
     setPreviewUrl(null);
-    
+
     setUploadProgress(0);
     setIsUploading(false);
-    setIsLoading(false);
   };
 
   return (
@@ -309,7 +357,7 @@ const AnalyzePage: React.FC = () => {
           variant="h1"
           description="Upload H&E stained slide images for AI-powered mitotic figure detection"
           actions={
-            (selectedFiles.length > 0 || selectedTestImage || analysisResult) && (
+            (selectedFiles.length > 0 || selectedImageId || isComplete) && (
               <Button
                 variant="normal"
                 onClick={resetAnalysis}
@@ -331,7 +379,7 @@ const AnalyzePage: React.FC = () => {
         )}
 
         {/* Upload Section */}
-        {!showResults && (
+        {(currentAnalysisId === null || isUploading) && (
           <ColumnLayout columns={2}>
             {/* File Upload */}
             <div>
@@ -365,9 +413,9 @@ const AnalyzePage: React.FC = () => {
                 {previewUrl && selectedFiles.length > 0 && (
                   <Box>
                     <div className="text-center p-4 bg-gray-50 rounded-lg border">
-                      <img 
-                        src={previewUrl} 
-                        alt="Image preview" 
+                      <img
+                        src={previewUrl}
+                        alt="Image preview"
                         className="max-w-full max-h-64 object-contain border border-gray-300 rounded"
                       />
                     </div>
@@ -384,11 +432,11 @@ const AnalyzePage: React.FC = () => {
               {testImages.length > 0 ? (
                 <Cards
                   ariaLabels={{
-                    itemSelectionLabel: (_, t) => `select ${t.name}`,
+                    itemSelectionLabel: (_, t) => `select ${t.s3_key?.split('/').pop() || t.id}`,
                     selectionGroupLabel: "Item selection"
                   }}
                   cardDefinition={{
-                    header: item => item.name,
+                    header: item => item.s3_key?.split('/').pop() || `Image ${item.id.slice(0, 8)}`,
                     sections: []
                   }}
                   cardsPerRow={[
@@ -405,12 +453,12 @@ const AnalyzePage: React.FC = () => {
                     </Box>
                   }
                   selectionType="single"
-                  selectedItems={selectedTestImage ? testImages.filter(img => img.name === selectedTestImage) : []}
+                  selectedItems={selectedImageId ? testImages.filter(img => img.id === selectedImageId) : []}
                   onSelectionChange={({ detail }) => {
                     if (detail.selectedItems.length > 0) {
-                      handleTestImageSelect(detail.selectedItems[0].name);
+                      handleImageSelect(detail.selectedItems[0].id);
                     } else {
-                      setSelectedTestImage(null);
+                      setSelectedImageId(null);
                       setPreviewUrl(null);
                     }
                   }}
@@ -426,55 +474,30 @@ const AnalyzePage: React.FC = () => {
           </ColumnLayout>
         )}
 
-        {/* Progress Section */}
-        {(isUploading || (uploadProgress > 0 && isLoading) || currentAnalysisId) && (
+        {/* Upload Progress Section */}
+        {(isUploading) && (
           <Alert type="info" header={
-            isUploading ? 'Uploading Image...' : 
-            currentAnalysisId ? 'AI Analysis in Progress...' : 
-            'Processing Image...'
+            'Uploading Image...'
           }>
             <SpaceBetween direction="vertical" size="s">
               <ProgressBar
                 value={
-                  isUploading ? uploadProgress : 
-                  currentAnalysisId ? progressPercentage : 
-                  100
+                  uploadProgress
                 }
                 label={
-                  isUploading ? 'Upload progress' : 
-                  currentAnalysisId ? 'AI Analysis progress' : 
-                  'AI Analysis in progress'
+                  'Upload progress'
                 }
                 description={
-                  isUploading 
-                    ? `${uploadProgress}% uploaded`
-                    : currentAnalysisId 
-                    ? currentStage
-                    : 'AI model is analyzing mitotic figures...'
+                  `${uploadProgress}% uploaded`
                 }
               />
               <Box variant="small">
-                {isUploading ? (
-                  uploadProgress < 10 
+                {(
+                  uploadProgress < 10
                     ? 'Preparing secure upload...'
-                    : uploadProgress < 70 
-                    ? 'Uploading to cloud storage...'
-                    : 'Upload completed, processing...'
-                ) : currentAnalysisId ? (
-                  <SpaceBetween direction="vertical" size="xs">
-                    <div>{currentStage}</div>
-                    {progress?.processing_progress && 
-                     typeof progress.processing_progress === 'object' && 
-                     'total_windows' in progress.processing_progress && 
-                     'current_window' in progress.processing_progress && 
-                     (progress.processing_progress as any).total_windows > 1 && (
-                      <div className="text-xs text-gray-500">
-                        Window {((progress.processing_progress as any).current_window || 0) + 1} of {(progress.processing_progress as any).total_windows}
-                      </div>
-                    )}
-                  </SpaceBetween>
-                ) : (
-                  'Deep learning analysis in progress. This may take a few moments.'
+                    : uploadProgress < 70
+                      ? 'Uploading to cloud storage...'
+                      : 'Upload completed, processing...'
                 )}
               </Box>
             </SpaceBetween>
@@ -482,22 +505,55 @@ const AnalyzePage: React.FC = () => {
         )}
 
         {/* Action Button */}
-        {!showResults && (
+        {(currentAnalysisId === null || isUploading) && (
           <div className="text-center">
             <Button
               variant="primary"
               onClick={handleAnalyze}
-              disabled={(selectedFiles.length === 0 && !selectedTestImage) || isLoading || isUploading}
-              loading={isLoading || isUploading}
+              disabled={(selectedFiles.length === 0 && !selectedImageId) || isUploading}
+              loading={isUploading}
               iconName="search"
             >
-              {isUploading ? 'Uploading...' : isLoading ? 'Analyzing...' : 'Start AI Analysis'}
+              {isUploading ? 'Uploading...' : 'Start AI Analysis'}
             </Button>
           </div>
         )}
 
+        {
+          currentAnalysisId !== null && !isUploading && !currentAnalysis && (
+            <ProgressBar
+              value={
+                0
+              }
+              label={
+                'Analysis progress'
+              }
+              description={
+                'waiting for analysis to start...'
+              }
+            />
+          )
+        }
+
+        {/* Analysis Progress Section */}
+        {
+          currentAnalysis && currentAnalysis.status === 'processing' && (
+            <ProgressBar
+              value={
+                progressPercentage
+              }
+              label={
+                'Analysis progress'
+              }
+              description={
+                currentStage
+              }
+            />
+          )
+        }
+
         {/* Results Section */}
-        {showResults && analysisResult && (
+        {isComplete && currentImage && (
           <Container header={
             <Header
               variant="h2"
@@ -522,77 +578,35 @@ const AnalyzePage: React.FC = () => {
               Analysis Results
             </Header>
           }>
-            <ColumnLayout columns={2} variant="text-grid">
-              {/* Image with detections */}
-              <div>
-                <Box variant="h3" margin={{ bottom: 's' }}>
-                  Analyzed Image with Detections
-                </Box>
-                <Box margin={{ bottom: 's' }}>
-                  <StatusIndicator type="success">
-                    Analysis completed successfully
-                  </StatusIndicator>
-                </Box>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <ImageViewer 
-                    imageSrc={
-                      progress?.image_url || 
-                      (selectedTestImage 
-                        ? `/test-image/${selectedTestImage}` 
-                        : previewUrl || analysisResult.image || '')
-                    } 
-                    predictions={analysisResult.predictions}
-                    imageWidth={analysisResult.image_width}
-                    imageHeight={analysisResult.image_height}
-                  />
-                </div>
+            {/* Image with detections */}
+            <div>
+              <Box variant="h3" margin={{ bottom: 's' }}>
+                Analyzed Image with Detections
+              </Box>
+              <Box margin={{ bottom: 's' }}>
+                <StatusIndicator type="success">
+                  Analysis completed successfully
+                </StatusIndicator>
+              </Box>
+              <div className="bg-gray-50 rounded-lg p-4 relative">
+                <ImageViewer
+                  imageSrc={
+                    currentImage.s3_url ||
+                    (currentImage.is_test_image && currentImage.s3_key
+                      ? `/test-image/${currentImage.s3_key.split('/').pop()}`
+                      : previewUrl || '')
+                  }
+                  predictions={currentDetections.map(detection => ({
+                    bbox: [detection.bbox_x1, detection.bbox_y1, detection.bbox_x2, detection.bbox_y2] as [number, number, number, number],
+                    confidence: detection.confidence,
+                    class_id: detection.class_id
+                  }))}
+                  imageWidth={currentImage.image_width || 0}
+                  imageHeight={currentImage.image_height || 0}
+                  //currentWindow={currentAnalysis.current_window}
+                />
               </div>
-
-              {/* Statistics */}
-              <div>
-                <SpaceBetween direction="vertical" size="m">
-                  <Box variant="h3">
-                    Detection Summary
-                  </Box>
-                  
-                  <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                    <div className="text-center">
-                      <div className="text-4xl font-bold text-blue-600 mb-2">
-                        {analysisResult.total_detections}
-                      </div>
-                      <div className="text-sm text-gray-600 font-medium">
-                        Mitotic Figures Detected
-                      </div>
-                    </div>
-                  </div>
-
-                  <ColumnLayout columns={2}>
-                    <div className="text-center p-3 bg-gray-50 rounded">
-                      <div className="text-lg font-semibold text-gray-900">
-                        {analysisResult.image_width} × {analysisResult.image_height}
-                      </div>
-                      <div className="text-xs text-gray-500">Image Resolution</div>
-                    </div>
-                    <div className="text-center p-3 bg-gray-50 rounded">
-                      <div className="text-lg font-semibold text-gray-900">
-                        {analysisResult.processing_info?.method === 'sliding_window' ? 'Sliding Window' : 'Direct'}
-                      </div>
-                      <div className="text-xs text-gray-500">Processing Method</div>
-                    </div>
-                  </ColumnLayout>
-
-                  {analysisResult.processing_info?.method === 'sliding_window' && (
-                    <Alert type="info" header="Large Image Processing">
-                      This image was processed using sliding window technique with 640×640 patches for optimal detection accuracy.
-                    </Alert>
-                  )}
-
-                  <Alert type="warning" header="Clinical Research Tool">
-                    This tool is intended for research purposes only and should not be used for clinical diagnosis without pathologist review.
-                  </Alert>
-                </SpaceBetween>
-              </div>
-            </ColumnLayout>
+            </div>
           </Container>
         )}
       </SpaceBetween>

@@ -4,7 +4,7 @@ interface Prediction {
   bbox: [number, number, number, number];
   confidence: number;
   class_id: number;
-  class_name: string;
+  //class_name: string;
 }
 
 interface ImageViewerProps {
