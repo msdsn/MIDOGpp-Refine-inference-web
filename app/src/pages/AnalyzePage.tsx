@@ -154,7 +154,8 @@ const AnalyzePage: React.FC = () => {
     }
   };
 
-  const handleImageSelect = (imageId: string) => {
+  const handleImageSelect = async (imageId: string) => {
+    console.log('handleImageSelect', imageId);
     setSelectedImageId(imageId);
     setSelectedFiles([]);
     setError(null);
@@ -163,8 +164,14 @@ const AnalyzePage: React.FC = () => {
     const image = images.find(img => img.id === imageId);
     if (image && image.is_test_image) {
       // For test images, construct URL from s3_key
+      console.log('image', image);
       const filename = image.s3_key?.split('/').pop() || '';
-      setPreviewUrl(`/test-image/${filename}`);
+      const result = await fetch(`/test-images/${filename}`);
+      const data = await result.json();
+      console.log('data', data);
+      console.log('data.presigned_url', data.presigned_url);
+      setPreviewUrl(data.presigned_url);
+      //setPreviewUrl(`/image/${filename}`);
     } else if (image?.s3_url) {
       setPreviewUrl(image.s3_url);
     }
@@ -188,34 +195,18 @@ const AnalyzePage: React.FC = () => {
         if (selectedImg?.is_test_image) {
           console.log('Analyzing test image:', selectedImg.id);
 
-          const result = await authenticatedFetchJson('/analyze', {
+          setCurrentImageId(selectedImg.id);
+
+          await authenticatedFetchJson('/analyze', {
             method: 'POST',
             body: {
+              analysis_id: analysisId,
+              model_name: 'mitotic-figure-detection',
               image_id: selectedImg.id,
+              s3_key: selectedImg.s3_key,
               is_test_image: true
             }
           });
-
-          if (result.completed) {
-            // Wait for context to update with new analysis
-            setTimeout(() => {
-              const mostRecentAnalysis = analyses
-                .filter(a => a.profile_id === user?.id)
-                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
-
-              if (mostRecentAnalysis) {
-                //setCurrentAnalysisId(mostRecentAnalysis.id);
-                console.log('Found test image analysis:', mostRecentAnalysis.id);
-              } else {
-
-              }
-            }, 1000);
-
-            console.log('Test image analysis started, tracking via context...');
-          } else {
-            setError('Test image analysis failed');
-
-          }
           return;
         }
       }
@@ -561,7 +552,6 @@ const AnalyzePage: React.FC = () => {
             />
           )
         }
-
         {/* Results Section */}
         {isComplete && currentImage && (
           <Container header={
@@ -602,10 +592,7 @@ const AnalyzePage: React.FC = () => {
               <div className="bg-gray-50 rounded-lg p-4 relative">
                 <ImageViewer
                   imageSrc={
-                    currentImage.s3_url ||
-                    (currentImage.is_test_image && currentImage.s3_key
-                      ? `/test-image/${currentImage.s3_key.split('/').pop()}`
-                      : previewUrl || '')
+                    (previewUrl || '')
                   }
                   predictions={currentDetections.map(detection => ({
                     bbox: [detection.bbox_x1, detection.bbox_y1, detection.bbox_x2, detection.bbox_y2] as [number, number, number, number],

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import UpgradePromotionModal from './UpgradePromotionModal';
+import Footer from './Footer';
 import Intercom, { show, shutdown, hide, onHide, onShow } from '@intercom/messenger-js-sdk';
 import {
   AppLayout as CloudscapeAppLayout,
@@ -91,13 +92,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           info: 'View past analyses',
           data: { route: '/history' }
         },
-        {
-          type: 'link' as const,
-          text: 'Demo Analysis',
-          href: '#',
-          info: 'Test ImageViewer3D component',
-          data: { route: '/demo' }
-        }
       ]
     },
     {
@@ -197,10 +191,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       <TopNavigation
         identity={{
           href: '',
-          title: 'Mitotic Figure Detection',
+          title: 'PathoMito',
           logo: {
             src: '/mitoticlogo.png',
-            alt: 'Mitotic Detection Logo'
+            alt: 'PathoMito Logo'
           },
           onFollow: () => navigate('/dashboard')
         }}
@@ -252,6 +246,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           <div style={{ width: '100%', position: 'relative' }}>
             <div style={{ width: contentWidth, position: 'relative' }}>
             {children}
+            <Footer />
             </div>
             
             

@@ -9,7 +9,6 @@ import AppLayout from './components/AppLayout';
 import DashboardPage from './pages/DashboardPage.tsx';
 import HistoryPage from './pages/HistoryPage.tsx';
 import AnalyzePage from './pages/AnalyzePage.tsx';
-import DemoAnalyzePage from './pages/DemoAnalyzePage.tsx';
 import ProfilePage from './pages/ProfilePage.tsx';
 
 import '@cloudscape-design/global-styles/index.css';
@@ -41,16 +40,6 @@ function App() {
                 <ProtectedRoute>
                   <AppLayout>
                     <AnalyzePage />
-                  </AppLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/demo"
-              element={
-                <ProtectedRoute>
-                  <AppLayout>
-                    <DemoAnalyzePage />
                   </AppLayout>
                 </ProtectedRoute>
               }

@@ -1,1 +1,64 @@
 @import "tailwindcss";
+
+/* Dashboard Custom Styles */
+.article-font {
+    font-family: 'Georgia', 'Times New Roman', 'Times', serif;
+    line-height: 1.7;
+    letter-spacing: 0.01em;
+}
+
+.gradient-text-blue {
+    --gradient-start: #022640;
+    --gradient-end: #5786AB;
+    background-image: linear-gradient(90deg, var(--gradient-start), var(--gradient-end));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+}
+
+.gradient-large-text {
+    background-image: url('/gradient_large.jpg');
+    background-size: cover;
+    background-position: center;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    font-weight: 600;
+}
+
+em {
+    color: #1d1d1f;
+    font-style: normal;
+    font-weight: 500;
+}
+
+sup {
+    font-size: 0.7em;
+    vertical-align: super;
+    color: #5786AB;
+    font-weight: 600;
+}
+
+.info-section h2, .info-section h3 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    letter-spacing: -0.02em;
+}
+
+.lottie-container {
+    perspective: 1000px;
+}
+
+.lottie-container > div {
+    transition: all 0.3s ease;
+}
+
+.lottie-container > div:hover {
+    transform: rotateY(-5deg) rotateX(5deg) translateZ(20px);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+}
+
+.references-section {
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+}

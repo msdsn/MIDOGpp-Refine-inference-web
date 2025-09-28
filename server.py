@@ -508,13 +508,21 @@ async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "model_loaded": model is not None}
 
-@app.get("/{full_path:path}")
-async def serve_react_app(request: Request, full_path: str):
-    file_path = os.path.join('app', 'dist', full_path)
-    if os.path.exists(file_path) and os.path.isfile(file_path):
-        return FileResponse(file_path)
-    else:
-        return FileResponse(os.path.join('app', 'dist', 'index.html'))
+
+@app.get("/test-images/{image_name}")
+async def get_test_image(image_name: str, request: Request):
+    """
+    Get presigned URL for viewing a test image
+    """
+    presigned_url = s3_client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': S3_BUCKET_NAME, 'Key': f"tests/{image_name}"},
+            ExpiresIn=86400  # 24 hours
+        )
+    return JSONResponse({
+        "presigned_url": presigned_url,
+        "expires_in": 86400  # 24 hours
+    })
 
 @app.get("/image/{image_id}")
 async def get_image(image_id: str, request: Request):
@@ -544,6 +552,15 @@ async def get_image(image_id: str, request: Request):
     except Exception as e:
         print(f"Error getting image: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error getting image: {str(e)}")
+
+@app.get("/{full_path:path}")
+async def serve_react_app(request: Request, full_path: str):
+    file_path = os.path.join('app', 'dist', full_path)
+    if os.path.exists(file_path) and os.path.isfile(file_path):
+        return FileResponse(file_path)
+    else:
+        return FileResponse(os.path.join('app', 'dist', 'index.html'))
+
 
 
 
