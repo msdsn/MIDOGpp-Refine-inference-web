@@ -73,26 +73,30 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         {
           type: 'link' as const,
           text: 'Dashboard',
-          href: '/dashboard',
-          info: 'Overview and statistics'
+          href: '#',
+          info: 'Overview and statistics',
+          data: { route: '/dashboard' }
         },
         {
           type: 'link' as const,
           text: 'New Analysis',
-          href: '/analyze',
-          info: 'Upload and analyze images'
+          href: '#',
+          info: 'Upload and analyze images',
+          data: { route: '/analyze' }
         },
         {
           type: 'link' as const,
           text: 'History',
-          href: '/history',
-          info: 'View past analyses'
+          href: '#',
+          info: 'View past analyses',
+          data: { route: '/history' }
         },
         {
           type: 'link' as const,
           text: 'Demo Analysis',
-          href: '/demo',
-          info: 'Test ImageViewer3D component'
+          href: '#',
+          info: 'Test ImageViewer3D component',
+          data: { route: '/demo' }
         }
       ]
     },
@@ -103,16 +107,22 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         {
           type: 'link' as const,
           text: 'Profile',
-          href: '/profile',
-          info: 'Manage account settings'
+          href: '#',
+          info: 'Manage account settings',
+          data: { route: '/profile' }
         }
       ]
     }
   ];
 
   const handleNavigate = (event: any) => {
-    if (event.detail.href) {
-      navigate(event.detail.href);
+    event.preventDefault(); // Sayfa yenilenmesini engelle
+    
+    // Custom data attribute'dan route bilgisini al
+    const route = event.detail.data?.route || event.detail.href;
+    
+    if (route && route !== '#') {
+      navigate(route);
     }
   };
 
@@ -186,12 +196,13 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       
       <TopNavigation
         identity={{
-          href: '/dashboard',
+          href: '',
           title: 'Mitotic Figure Detection',
           logo: {
             src: '/mitoticlogo.png',
             alt: 'Mitotic Detection Logo'
-          }
+          },
+          onFollow: () => navigate('/dashboard')
         }}
         utilities={[
           {
@@ -229,7 +240,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         navigation={
           <SideNavigation
             activeHref={location.pathname}
-            header={{ text: 'Navigation', href: '/dashboard' }}
+            header={{ 
+              text: 'Navigation', 
+              href: '#'
+            }}
             items={navigationItems}
             onFollow={handleNavigate}
           />
