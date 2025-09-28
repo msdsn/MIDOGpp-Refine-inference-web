@@ -2,12 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import UpgradePromotionModal from './UpgradePromotionModal';
-import Chatbot from './chatbot/Chatbot';
+import Intercom, { show, shutdown, hide, onHide, onShow } from '@intercom/messenger-js-sdk';
 import {
   AppLayout as CloudscapeAppLayout,
   SideNavigation,
-  TopNavigation
+  TopNavigation,
+  Button
 } from '@cloudscape-design/components';
+import './AppLayout.css';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -15,14 +17,53 @@ interface AppLayoutProps {
 
 const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const [navigationOpen, setNavigationOpen] = useState(false);
-  const [toolsOpen, setToolsOpen] = useState(false);
+  const [intercomVisible, setIntercomVisible] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  // Check if mobile device
   useEffect(() => {
-    //const isMobile = window.innerWidth < 600;
-    //setToolsOpen(!isMobile);
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  useEffect(() => {
+    Intercom({
+      app_id: 'kvdugt16',
+      hide_default_launcher: true,     // default launcher'ı gizle
+      alignment: 'right',              
+      horizontal_padding: 0,
+      vertical_padding: 20,
+    });
+
+    // Mobile'da başlangıçta kapalı, desktop'ta açık
+    if (isMobile) {
+      hide();
+      setIntercomVisible(false);
+    } else {
+      show();
+      setIntercomVisible(true);
+    }
+
+    // Intercom show/hide event listeners
+    onShow(() => {
+      setIntercomVisible(true);
+    });
+
+    onHide(() => {
+      setIntercomVisible(false);
+    });
+
+    return () => {
+      shutdown();
+    };
+  }, [isMobile]);
 
   const navigationItems = [
     {
@@ -72,6 +113,14 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const handleNavigate = (event: any) => {
     if (event.detail.href) {
       navigate(event.detail.href);
+    }
+  };
+
+  const handleChatToggle = () => {
+    if (intercomVisible) {
+      hide();
+    } else {
+      show();
     }
   };
 
@@ -127,11 +176,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     }
   };
 
-  const tools = (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Chatbot />
-    </div>
-  );
+  // Content genişliği hesaplama: Intercom açıkken 400px boşluk bırak
+  const contentWidth = intercomVisible ? 'calc(100% - 400px)' : 'calc(100% - 40px)';
 
   return (
     <>
@@ -179,10 +225,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       <CloudscapeAppLayout
         navigationOpen={navigationOpen}
         onNavigationChange={({ detail }) => setNavigationOpen(detail.open)}
-        toolsOpen={toolsOpen}
-        onToolsChange={({ detail }) => setToolsOpen(detail.open)}
         navigationWidth={240}
-        toolsWidth={360}
         navigation={
           <SideNavigation
             activeHref={location.pathname}
@@ -191,9 +234,27 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             onFollow={handleNavigate}
           />
         }
-        tools={tools}
-        content={children}
-        toolsHide={false}
+        content={
+          <div style={{ width: '100%', position: 'relative' }}>
+            <div style={{ width: contentWidth, position: 'relative' }}>
+            {children}
+            </div>
+            
+            
+            {/* Chat Button - Intercom gizliyken göster */}
+            {!intercomVisible && (
+              <div className="chat-button">
+                <Button
+                  variant="primary"
+                  iconName="contact"
+                  onClick={handleChatToggle}
+                  ariaLabel="Open chat support"
+                />
+              </div>
+            )}
+          </div>
+        }
+        toolsHide={true}
         navigationHide={false}
         splitPanelOpen={false}
         splitPanelSize={300}

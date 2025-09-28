@@ -1,0 +1,30 @@
+.chat-button {
+  position: fixed !important;
+  top: 60px !important;
+  right: 20px !important;
+  z-index: 1000 !important;
+  border-radius: 50% !important;
+  width: 60px !important;
+  height: 60px !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+  min-width: 60px !important;
+}
+
+.chat-button button {
+  border-radius: 50% !important;
+  width: 60px !important;
+  height: 60px !important;
+  min-width: 60px !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+.chat-button button svg {
+  width: 30px !important;
+  height: 30px !important;
+}
+.chat-button button span {
+    width: 30px !important;
+    height: 30px !important;
+  }
