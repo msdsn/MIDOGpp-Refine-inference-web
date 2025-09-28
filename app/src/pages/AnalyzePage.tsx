@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAnalyses } from '../contexts/AnalysesContext';
 import { useDetections } from '../contexts/DetectionsContext';
@@ -40,6 +40,7 @@ const AnalyzePage: React.FC = () => {
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [currentAnalysisId, setCurrentAnalysisId] = useState<string | null>(null);
   const [currentImageId, setCurrentImageId] = useState<string | null>(null);
+  const downloadImageRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     console.log('analyses', analyses);
@@ -350,6 +351,15 @@ const AnalyzePage: React.FC = () => {
     setIsUploading(false);
   };
 
+  // Handle download report
+  const handleDownloadReport = () => {
+    console.log('handleDownloadReport');
+    if (downloadImageRef.current) {
+      console.log('downloadImageRef.current', downloadImageRef.current);
+      downloadImageRef.current();
+    }
+  };
+
   return (
     <Container>
       <SpaceBetween direction="vertical" size="l">
@@ -569,6 +579,7 @@ const AnalyzePage: React.FC = () => {
                   <Button
                     variant="primary"
                     iconName="download"
+                    onClick={handleDownloadReport}
                   >
                     Download Report
                   </Button>
@@ -603,6 +614,7 @@ const AnalyzePage: React.FC = () => {
                   }))}
                   imageWidth={currentImage.image_width || 0}
                   imageHeight={currentImage.image_height || 0}
+                  onDownloadImage={downloadImageRef}
                   //currentWindow={currentAnalysis.current_window}
                 />
               </div>

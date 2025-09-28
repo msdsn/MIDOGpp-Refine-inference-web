@@ -12,13 +12,15 @@ interface ImageViewerProps {
   predictions: Prediction[];
   imageWidth: number;
   imageHeight: number;
+  onDownloadImage?: React.MutableRefObject<(() => void) | null>;
 }
 
 const ImageViewer: React.FC<ImageViewerProps> = ({
   imageSrc,
   predictions,
   imageWidth,
-  imageHeight
+  imageHeight,
+  onDownloadImage
 }) => {
   const [scale, setScale] = useState(0.5);
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -273,6 +275,79 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
       container.removeEventListener('touchend', handleTouchEnd);
     };
   }, [handleTouchMove, handleTouchEnd]);
+
+  // Download image with detections drawn on it
+  const downloadImageWithDetections = useCallback(async () => {
+    if (!imageRef.current) return;
+
+    // Create a canvas
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Set canvas dimensions to match the image
+    canvas.width = imageWidth;
+    canvas.height = imageHeight;
+
+    // Create a new image element to ensure it's fully loaded
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    
+    img.onload = () => {
+      // Draw the original image
+      ctx.drawImage(img, 0, 0, imageWidth, imageHeight);
+      
+      // Draw detections
+      predictions.forEach((prediction, index) => {
+        const [x1, y1, x2, y2] = prediction.bbox;
+        const width = x2 - x1;
+        const height = y2 - y1;
+        
+        // Set styles for bounding box
+        ctx.strokeStyle = '#dc2626'; // Red color
+        ctx.lineWidth = 3;
+        ctx.fillStyle = '#dc2626';
+        ctx.font = 'bold 14px Arial';
+        
+        // Draw bounding box rectangle
+        ctx.strokeRect(x1, y1, width, height);
+        
+        // Draw label background
+        const labelText = `#${index + 1} Mitotic (${(prediction.confidence * 100).toFixed(1)}%)`;
+        const labelWidth = ctx.measureText(labelText).width + 12;
+        const labelHeight = 24;
+        
+        ctx.fillRect(x1, y1 - labelHeight, labelWidth, labelHeight);
+        
+        // Draw label text
+        ctx.fillStyle = 'white';
+        ctx.fillText(labelText, x1 + 6, y1 - 6);
+      });
+      
+      // Convert canvas to blob and download
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `mitotic-analysis-result-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.png`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }
+      }, 'image/png');
+    };
+    
+    img.src = imageSrc;
+  }, [imageSrc, predictions, imageWidth, imageHeight]);
+
+  // Expose download function to parent
+  useEffect(() => {
+    if (onDownloadImage) {
+      onDownloadImage.current = downloadImageWithDetections;
+    }
+  }, [onDownloadImage, downloadImageWithDetections]);
 
   // Keyboard shortcuts
   useEffect(() => {

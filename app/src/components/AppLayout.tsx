@@ -20,8 +20,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   useEffect(() => {
-    const isMobile = window.innerWidth < 600;
-    setToolsOpen(!isMobile);
+    //const isMobile = window.innerWidth < 600;
+    //setToolsOpen(!isMobile);
   }, []);
 
   const navigationItems = [
