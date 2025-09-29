@@ -43,10 +43,10 @@ const DashboardPage: React.FC = () => {
           {/* Title and Subtitle */}
           <div className="mb-8">
             <h2 className="text-3xl font-bold text-gray-900 mb-1 leading-tight">
-              Advanced AI Technology.
+              Advanced AI Technology
             </h2>
             <h3 className="text-2xl font-semibold text-gray-700 leading-tight">
-              Precision in Digital Pathology.
+              Precision in Digital Pathology
             </h3>
           </div>
           
@@ -59,11 +59,11 @@ const DashboardPage: React.FC = () => {
                   PathoMito leverages <span className="gradient-text-blue font-medium">state-of-the-art artificial intelligence</span> to automate mitotic figure detection, 
                   a critical step in cancer grading and histopathology. Our model is trained on the comprehensive <em>MIDOG++</em> dataset<sup>1</sup>, 
                   covering <span className="font-medium text-gray-700">503 histological specimens</span> across seven distinct tumor types with 
-                  <span className="font-medium text-gray-700">11,937 meticulously annotated mitotic figures</span>, ensuring robust performance across 
+                  <span className="font-medium text-gray-700"> 11,937 meticulously annotated mitotic figures</span>, ensuring robust performance across 
                   diverse tissue morphologies, staining protocols, and imaging devices.
                 </p>
                 <p className="text-justify mb-5 indent-8">
-                  Powered by a sophisticated <em>YOLOv11n</em> deep learning architecture<sup>2</sup>, PathoMito delivers 
+                  Powered by the <em>YOLOv11n</em> deep learning architecture<sup>2</sup>, PathoMito delivers 
                   <span className="gradient-text-blue font-medium">rapid and reliable detection</span> of mitotic figures in 
                   whole-slide images, significantly reducing intra- and inter-observer variability while streamlining workflows for 
                   pathologists and researchers worldwide.
@@ -74,14 +74,22 @@ const DashboardPage: React.FC = () => {
               </div>
             </div>
             
-            {/* Lottie Animation */}
+            {/* Lottie Animation with Background */}
             <div className="lottie-container flex justify-center items-center">
-              <div className="w-80 h-80 rounded-2xl bg-white p-8 flex items-center justify-center">
+              <div 
+                className="w-80 h-80 rounded-2xl p-8 flex items-center justify-center relative overflow-hidden"
+                style={{
+                  backgroundImage: 'url(/mito.jpg)',
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  backgroundRepeat: 'no-repeat'
+                }}
+              >
                 <DotLottieReact
-                  src="/background_lines_wave.lottie"
+                  src="/mito.lottie"
                   loop
                   autoplay
-                  className="w-full h-full"
+                  className="w-full h-full relative z-10"
                 />
               </div>
             </div>
@@ -122,10 +130,10 @@ const DashboardPage: React.FC = () => {
           {/* Title and Subtitle */}
           <div className="mb-8">
             <h2 className="text-3xl font-bold text-gray-900 mb-1 leading-tight">
-              Empowering Pathologists.
+              Empowering Pathologists
             </h2>
             <h3 className="text-2xl font-semibold text-gray-700 leading-tight">
-              Not Replacing, but Enhancing.
+              Advanced AI Architecture
             </h3>
           </div>
           
@@ -135,7 +143,7 @@ const DashboardPage: React.FC = () => {
             <div className="text-content article-font max-w-prose">
               <div className="prose prose-gray max-w-none">
                 <p className="text-justify mb-5 first-letter:text-4xl first-letter:font-bold first-letter:mr-1 first-letter:float-left first-letter:leading-none">
-                  At Pathomito, our mission is <span className="font-medium text-gray-700">not to replace pathologists but to empower them</span>. 
+                  At Pathomito, our mission is <span className="font-medium text-gray-700">to empower pathologists</span>. 
                   We provide an advanced mitosis detection framework that seamlessly integrates into pathology workflows, 
                   helping pathologists <span className="gradient-text-blue font-medium">save time, reduce error, and enhance diagnostic precision</span>.
                 </p>
@@ -168,12 +176,12 @@ const DashboardPage: React.FC = () => {
             <h4 className="text-sm font-semibold text-gray-700 mb-3">References</h4>
             <div className="text-xs text-gray-600 space-y-2">
               <p>
-                <sup>1</sup> Aubreville, M., et al. (2023). MIDOG++: A comprehensive dataset for mitosis detection in histopathology images. 
-                <em>Nature Scientific Data</em>, 10, 484.
+                <sup>1</sup> Aubreville, M., et al. (2023). A comprehensive multi-domain dataset for mitotic figure detection. 
+                <em> Scientific Data</em>, 10, 484. <a href="https://doi.org/10.1038/s41597-023-02327-4" target="_blank" rel="noopener noreferrer">https://doi.org/10.1038/s41597-023-02327-4</a>
               </p>
               <p>
-                <sup>2</sup> Ultralytics. (2024). YOLOv11: A state-of-the-art, real-time object detection and image segmentation model. 
-                <em>GitHub Repository</em>.
+                <sup>2</sup> Jocher, G., & Qiu, J. (2024). Ultralytics YOLO11 (Version 11.0.0) [Computer software]. 
+                <em> GitHub</em>. <a href="https://github.com/ultralytics/ultralytics" target="_blank" rel="noopener noreferrer">https://github.com/ultralytics/ultralytics</a>
               </p>
             </div>
           </div>
