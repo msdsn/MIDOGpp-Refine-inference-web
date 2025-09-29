@@ -133,7 +133,7 @@ const DashboardPage: React.FC = () => {
               Empowering Pathologists
             </h2>
             <h3 className="text-2xl font-semibold text-gray-700 leading-tight">
-              Advanced AI Architecture
+              Supporting Clinical Excellence
             </h3>
           </div>
           
@@ -149,7 +149,7 @@ const DashboardPage: React.FC = () => {
                 </p>
                 <p className="text-justify indent-8">
                   By streaming our technology to clinical and research environments, we aim to support medical experts with 
-                  <em>reliable, interpretable tools</em> that elevate both efficiency and confidence in decision-making processes throughout 
+                  <em> reliable, interpretable tools</em> that elevate both efficiency and confidence in decision-making processes throughout 
                   the diagnostic workflow.
                 </p>
               </div>
