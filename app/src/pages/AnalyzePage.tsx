@@ -124,6 +124,11 @@ const AnalyzePage: React.FC = () => {
       setIsUploading(false);
       setUploadProgress(0);
       console.log('Analysis completed!', currentAnalysis.id);
+      
+      // Scroll to top when analysis is complete and results are shown
+      setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }, 100);
     }
   }, [isComplete, currentAnalysis]);
 
@@ -358,7 +363,7 @@ const AnalyzePage: React.FC = () => {
           variant="h1"
           description="Upload H&E stained slide images for AI-powered mitotic figure detection"
           actions={
-            (selectedFiles.length > 0 || selectedImageId || isComplete) && (
+            (isComplete) && (
               <Button
                 variant="normal"
                 onClick={resetAnalysis}

@@ -26,7 +26,7 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [selectedPrediction, setSelectedPrediction] = useState<number | null>(null);
+  const [_selectedPrediction, setSelectedPrediction] = useState<number | null>(null);
   const [showMinimap, setShowMinimap] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
@@ -118,9 +118,7 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
     const centerY = (y1 + y2) / 2;
     
     // Calculate the scale needed to show the bounding box nicely
-
     const container = containerRef.current.getBoundingClientRect();
-    
     const newScale = 0.5
     
     // Calculate position to center the bounding box
@@ -479,11 +477,6 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
             <h4 className="text-sm sm:text-base font-semibold text-blue-900">
               Detected Mitotic Figures ({predictions.length})
             </h4>
-            {selectedPrediction !== null && (
-              <span className="text-xs sm:text-sm text-blue-600">
-                Focused on Detection #{selectedPrediction + 1}
-              </span>
-            )}
           </div>
           
           <div className="flex flex-wrap gap-1 sm:gap-2">
@@ -491,11 +484,7 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
               <button
                 key={index}
                 onClick={() => focusOnPrediction(index)}
-                className={`px-2 sm:px-3 py-1 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all ${
-                  selectedPrediction === index
-                    ? 'bg-blue-600 text-white shadow-md'
-                    : 'bg-white text-blue-700 border border-blue-300 hover:bg-blue-100'
-                }`}
+                className="px-2 sm:px-3 py-1 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all bg-white text-blue-700 border border-blue-300 hover:bg-blue-100"
               >
                 #{index + 1} ({(prediction.confidence * 100).toFixed(1)}%)
               </button>
@@ -555,7 +544,6 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
               const [x1, y1, x2, y2] = prediction.bbox;
               const width = x2 - x1;
               const height = y2 - y1;
-              const isSelected = selectedPrediction === index;
               
               return (
                 <g key={index}>
@@ -566,9 +554,9 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
                     width={width}
                     height={height}
                     fill="none"
-                    stroke={isSelected ? "#2563eb" : "#dc2626"}
-                    strokeWidth={isSelected ? 4 : 3}
-                    className={`opacity-90 ${isSelected ? 'animate-pulse' : ''}`}
+                    stroke="#dc2626"
+                    strokeWidth={3}
+                    className="opacity-90"
                   />
                   
                   {/* Label background */}
@@ -577,7 +565,7 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
                     y={y1 - 32}
                     width={Math.max(width, 140)}
                     height="32"
-                    fill={isSelected ? "#2563eb" : "#dc2626"}
+                    fill="#dc2626"
                     className="opacity-95"
                   />
                   
@@ -654,7 +642,6 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
                   const [x1, y1, x2, y2] = prediction.bbox;
                   const width = x2 - x1;
                   const height = y2 - y1;
-                  const isSelected = selectedPrediction === index;
                   
                   return (
                     <rect
@@ -664,7 +651,7 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
                       width={width}
                       height={height}
                       fill="none"
-                      stroke={isSelected ? "#2563eb" : "#dc2626"}
+                      stroke="#dc2626"
                       strokeWidth="2"
                       className="opacity-80"
                     />

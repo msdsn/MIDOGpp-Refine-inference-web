@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+//import { useNavigate } from 'react-router-dom';
 //import { useAuth } from '../contexts/AuthContext';
 import {
   Container,
@@ -10,11 +10,7 @@ import {
 } from '@cloudscape-design/components';
 import { DotLottieReact } from '@lottiefiles/dotlottie-react';
 
-const DashboardPage: React.FC = () => {
-  //const { user } = useAuth();
-  const navigate = useNavigate();
-
-
+const DashboardPageTemp: React.FC = () => {
 
   return (
     <Container>
@@ -26,7 +22,7 @@ const DashboardPage: React.FC = () => {
             <Button
               variant="primary"
               iconName="add-plus"
-              onClick={() => navigate('/analyze')}
+              disabled
             >
               New Analysis
             </Button>
@@ -110,14 +106,14 @@ const DashboardPage: React.FC = () => {
               <Button
                 variant="primary"
                 iconName="add-plus"
-                onClick={() => navigate('/analyze')}
+                disabled
               >
                 Upload Image
               </Button>
               <Button
                 variant="normal"
                 iconName="file"
-                onClick={() => navigate('/history')}
+                disabled
               >
                 View History
               </Button>
@@ -191,4 +187,4 @@ const DashboardPage: React.FC = () => {
   );
 };
 
-export default DashboardPage; 
+export default DashboardPageTemp; 
