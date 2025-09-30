@@ -52,7 +52,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and
 # Models are now imported from types.api
 
 # Load YOLO model
-model = YOLO("best.pt")
+model = YOLO("best_mitotic_only.pt")
 
 # Initialize background task executor for database operations
 background_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="db_task")
