@@ -192,10 +192,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         identity={{
           href: '',
           title: 'PathoMito',
-          logo: {
-            src: '/mitoticlogo.png',
-            alt: 'PathoMito Logo'
-          },
           onFollow: () => navigate('/dashboard')
         }}
         utilities={[

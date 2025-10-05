@@ -51,8 +51,11 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and
 
 # Models are now imported from types.api
 
-# Load YOLO model
-model = YOLO("best_mitotic_only.pt")
+# Load YOLO models
+models = {
+    "best_mitotic_only.pt": YOLO("best_mitotic_only.pt"),
+    "best_probably_single_class.pt": YOLO("best_probably_single_class.pt")
+}
 
 # Initialize background task executor for database operations
 background_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="db_task")
@@ -257,6 +260,15 @@ async def analyze_image(request: AnalyzeRequest, http_request: Request):
     s3_key = request.s3_key
     model_name = request.model_name
 
+    # Get the selected model
+    if model_name not in models:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid model name. Available models: {list(models.keys())}"
+        )
+    
+    selected_model = models[model_name]
+
     analysis_id = request.analysis_id
     
     try:
@@ -332,7 +344,7 @@ async def analyze_image(request: AnalyzeRequest, http_request: Request):
         # Perform sliding window inference with real-time detection saving
         if original_width <= WINDOW_SIZE and original_height <= WINDOW_SIZE:
             # Small image, process directly with real-time NMS
-            results = model(img_array)
+            results = selected_model(img_array)
             
             detections_to_save = []
             
@@ -362,7 +374,7 @@ async def analyze_image(request: AnalyzeRequest, http_request: Request):
             submit_background_task(update_analysis_progress_sync, analysis_id, 1)
         else:
             # Large image, use sliding window approach with real-time NMS and background DB saving
-            sliding_window_inference_with_progress(img_array, model, analysis_id)
+            sliding_window_inference_with_progress(img_array, selected_model, analysis_id)
         
         # For small images, also submit completion task to background
         if original_width <= WINDOW_SIZE and original_height <= WINDOW_SIZE:
@@ -506,7 +518,7 @@ async def update_analysis_error(analysis_id: str, error_message: str):
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {"status": "healthy", "model_loaded": model is not None}
+    return {"status": "healthy", "models_loaded": len(models) > 0, "available_models": list(models.keys())}
 
 
 @app.get("/test-images/{image_name}")

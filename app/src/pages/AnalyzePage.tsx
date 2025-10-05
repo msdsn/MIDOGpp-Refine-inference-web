@@ -15,7 +15,8 @@ import {
   Alert,
   Cards,
   StatusIndicator,
-  ColumnLayout
+  ColumnLayout,
+  RadioGroup
 } from '@cloudscape-design/components';
 
 
@@ -32,6 +33,12 @@ const AnalyzePage: React.FC = () => {
   const { detectionsByAnalysis } = useDetections();
   const { images } = useImages();
 
+  // Model options
+  const modelOptions = [
+    { label: 'Model 1', value: 'best_mitotic_only.pt' },
+    { label: 'Model 2', value: 'best_probably_single_class.pt' }
+  ];
+
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -40,6 +47,7 @@ const AnalyzePage: React.FC = () => {
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [currentAnalysisId, setCurrentAnalysisId] = useState<string | null>(null);
   const [currentImageId, setCurrentImageId] = useState<string | null>(null);
+  const [selectedModel, setSelectedModel] = useState<string>('best_mitotic_only.pt');
   const downloadImageRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -206,7 +214,7 @@ const AnalyzePage: React.FC = () => {
             method: 'POST',
             body: {
               analysis_id: analysisId,
-              model_name: 'mitotic-figure-detection',
+              model_name: selectedModel,
               image_id: selectedImg.id,
               s3_key: selectedImg.s3_key,
               is_test_image: true
@@ -289,7 +297,7 @@ const AnalyzePage: React.FC = () => {
           method: 'POST',
           body: {
             analysis_id: analysisId,
-            model_name: 'mitotic-figure-detection',
+            model_name: selectedModel,
             image_id: imageId,
             s3_key: s3_key,
             is_test_image: false
@@ -386,98 +394,114 @@ const AnalyzePage: React.FC = () => {
 
         {/* Upload Section */}
         {(currentAnalysisId === null || isUploading) && (
-          <ColumnLayout columns={2}>
-            {/* File Upload */}
-            <div>
-              <Box variant="h2" margin={{ bottom: 'm' }}>
-                Upload Image
-              </Box>
-              <SpaceBetween direction="vertical" size="m">
-                <FormField
-                  label="Select H&E stained slide image"
-                  description="Supports PNG, JPG, JPEG, TIFF formats. Automatic scaling for large images."
-                >
-                  <FileUpload
-                    onChange={handleFileUpload}
-                    value={selectedFiles}
-                    i18nStrings={{
-                      uploadButtonText: e => e ? "Choose files" : "Choose file",
-                      dropzoneText: e => e ? "Drop files to upload" : "Drop file to upload",
-                      removeFileAriaLabel: e => `Remove file ${e + 1}`,
-                      limitShowFewer: "Show fewer files",
-                      limitShowMore: "Show more files",
-                      errorIconAriaLabel: "Error"
-                    }}
-                    showFileLastModified
-                    showFileSize
-                    showFileThumbnail
-                    constraintText="Maximum file size: 100MB"
-                    accept="image/*,.tiff,.tif"
-                  />
-                </FormField>
+          <SpaceBetween direction="vertical" size="l">
+            {/* Model Selection */}
+            
+            <FormField
+              label="Choose AI Model"
+              description="Select the model to use for mitotic figure detection"
+            >
+              <RadioGroup
+                onChange={({ detail }) => setSelectedModel(detail.value)}
+                value={selectedModel}
+                items={modelOptions}
+              />
+            </FormField>
 
-                {previewUrl && selectedFiles.length > 0 && (
-                  <Box>
-                    <div className="text-center p-4 bg-gray-50 rounded-lg border">
-                      <img
-                        src={previewUrl}
-                        alt="Image preview"
-                        className="max-w-full max-h-64 object-contain border border-gray-300 rounded"
-                      />
-                    </div>
+            <ColumnLayout columns={2}>
+              {/* File Upload */}
+              <div>
+                <Box variant="h2" margin={{ bottom: 'm' }}>
+                  Upload Image
+                </Box>
+                <SpaceBetween direction="vertical" size="m">
+                  <FormField
+                    label="Select H&E stained slide image"
+                    description="Supports PNG, JPG, JPEG, TIFF formats. Automatic scaling for large images."
+                  >
+                    <FileUpload
+                      onChange={handleFileUpload}
+                      value={selectedFiles}
+                      i18nStrings={{
+                        uploadButtonText: e => e ? "Choose files" : "Choose file",
+                        dropzoneText: e => e ? "Drop files to upload" : "Drop file to upload",
+                        removeFileAriaLabel: e => `Remove file ${e + 1}`,
+                        limitShowFewer: "Show fewer files",
+                        limitShowMore: "Show more files",
+                        errorIconAriaLabel: "Error"
+                      }}
+                      showFileLastModified
+                      showFileSize
+                      showFileThumbnail
+                      constraintText="Maximum file size: 100MB"
+                      accept="image/*,.tiff,.tif"
+                    />
+                  </FormField>
+
+                  {previewUrl && selectedFiles.length > 0 && (
+                    <Box>
+                      <div className="text-center p-4 bg-gray-50 rounded-lg border">
+                        <img
+                          src={previewUrl}
+                          alt="Image preview"
+                          className="max-w-full max-h-64 object-contain border border-gray-300 rounded"
+                        />
+                      </div>
+                    </Box>
+                  )}
+                </SpaceBetween>
+              </div>
+
+              {/* Test Images */}
+              <div>
+                <Box variant="h2" margin={{ bottom: 'm' }}>
+                  Sample Images
+                </Box>
+                {testImages.length > 0 ? (
+                  <div style={{ maxWidth: '320px' }}>
+                    <Cards
+                      ariaLabels={{
+                        itemSelectionLabel: (_, t) => `select ${t.s3_key?.split('/').pop() || t.id}`,
+                        selectionGroupLabel: "Item selection"
+                      }}
+                      cardDefinition={{
+                        header: item => item.s3_key?.split('/').pop() || `Image ${item.id.slice(0, 8)}`,
+                        sections: []
+                      }}
+                      cardsPerRow={[
+                        { cards: 2, minWidth: 0 }
+                      ]}
+                      items={testImages}
+                      loadingText="Loading test images"
+                      empty={
+                        <Box textAlign="center" color="inherit">
+                          <Box variant="strong" textAlign="center" color="inherit">
+                            No test images available
+                          </Box>
+                        </Box>
+                      }
+                      selectionType="single"
+                      selectedItems={selectedImageId ? testImages.filter(img => img.id === selectedImageId) : []}
+                      onSelectionChange={({ detail }) => {
+                        if (detail.selectedItems.length > 0) {
+                          handleImageSelect(detail.selectedItems[0].id);
+                        } else {
+                          setSelectedImageId(null);
+                          setPreviewUrl(null);
+                        }
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <Box textAlign="center" color="inherit">
+                    <Box variant="p" textAlign="center" color="inherit">
+                      No sample images available
+                    </Box>
                   </Box>
                 )}
-              </SpaceBetween>
-            </div>
-
-            {/* Test Images */}
-            <div>
-              <Box variant="h2" margin={{ bottom: 'm' }}>
-                Sample Images
-              </Box>
-              {testImages.length > 0 ? (
-                <Cards
-                  ariaLabels={{
-                    itemSelectionLabel: (_, t) => `select ${t.s3_key?.split('/').pop() || t.id}`,
-                    selectionGroupLabel: "Item selection"
-                  }}
-                  cardDefinition={{
-                    header: item => item.s3_key?.split('/').pop() || `Image ${item.id.slice(0, 8)}`,
-                    sections: []
-                  }}
-                  cardsPerRow={[
-                    { cards: 1 },
-                    { minWidth: 500, cards: 2 }
-                  ]}
-                  items={testImages}
-                  loadingText="Loading test images"
-                  empty={
-                    <Box textAlign="center" color="inherit">
-                      <Box variant="strong" textAlign="center" color="inherit">
-                        No test images available
-                      </Box>
-                    </Box>
-                  }
-                  selectionType="single"
-                  selectedItems={selectedImageId ? testImages.filter(img => img.id === selectedImageId) : []}
-                  onSelectionChange={({ detail }) => {
-                    if (detail.selectedItems.length > 0) {
-                      handleImageSelect(detail.selectedItems[0].id);
-                    } else {
-                      setSelectedImageId(null);
-                      setPreviewUrl(null);
-                    }
-                  }}
-                />
-              ) : (
-                <Box textAlign="center" color="inherit">
-                  <Box variant="p" textAlign="center" color="inherit">
-                    No sample images available
-                  </Box>
-                </Box>
-              )}
-            </div>
-          </ColumnLayout>
+              </div>
+            </ColumnLayout>
+          </SpaceBetween>
         )}
 
         {/* Upload Progress Section */}
